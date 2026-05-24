@@ -30,20 +30,32 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Install cloudflared
+        run: |
+          curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb -o cloudflared.deb
+          sudo dpkg -i cloudflared.deb
+
       - name: Deploy to NAS
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.NAS_HOST }}
-          port: ${{ secrets.NAS_PORT }}
-          username: ${{ secrets.NAS_USER }}
-          key: ${{ secrets.NAS_SSH_KEY }}
-          script: |
-            /usr/local/bin/docker pull ${{ secrets.DOCKER_USERNAME }}/reader:latest
-            /usr/local/bin/docker stop reader 2>/dev/null || true
-            /usr/local/bin/docker rm reader 2>/dev/null || true
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.NAS_SSH_KEY }}
+          NAS_HOST: ${{ secrets.NAS_HOST }}
+          NAS_USER: ${{ secrets.NAS_USER }}
+          DOCKER_USER: ${{ secrets.DOCKER_USERNAME }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "Host $NAS_HOST" >> ~/.ssh/config
+          echo "  ProxyCommand cloudflared access ssh --hostname %h" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+          ssh "$NAS_USER@$NAS_HOST" "/usr/local/bin/docker pull ${DOCKER_USER}/reader:latest && \
+            /usr/local/bin/docker stop reader 2>/dev/null; \
+            /usr/local/bin/docker rm reader 2>/dev/null; \
             /usr/local/bin/docker run -d \
               --name reader \
               --restart unless-stopped \
               -p 8080:8080 \
               -v /volume1/docker/reader/data:/app/data \
-              ${{ secrets.DOCKER_USERNAME }}/reader:latest
+              ${DOCKER_USER}/reader:latest"
