@@ -24,7 +24,9 @@ export default function Search() {
     <div>
       <h2 className="text-lg font-semibold mb-4">
         搜索: {keyword}
-        {loading && <span className="ml-2 text-sm text-gray-500">加载中...</span>}
+        <span className="ml-2 text-sm text-gray-500">
+          {loading ? `搜索中... (${searchResults.length} 条)` : `${searchResults.length} 条结果`}
+        </span>
       </h2>
 
       {error && (

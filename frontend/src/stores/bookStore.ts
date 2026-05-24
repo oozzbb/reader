@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { api, SearchResult, Chapter } from "@/api/client";
+import { SearchResult, Chapter } from "@/api/client";
+import { api } from "@/api/client";
 
 interface BookState {
   searchResults: SearchResult[];
@@ -10,19 +11,51 @@ interface BookState {
   loadChapters: (bookUrl: string, sourceUrl: string) => Promise<void>;
 }
 
-export const useBookStore = create<BookState>((set) => ({
+export const useBookStore = create<BookState>((set, get) => ({
   searchResults: [],
   chapters: [],
   loading: false,
   error: "",
 
   search: async (keyword: string) => {
-    set({ loading: true, error: "" });
+    set({ searchResults: [], loading: true, error: "" });
+
     try {
-      const results = await api.search(keyword);
-      set({ searchResults: results, loading: false });
+      const response = await fetch(
+        `/api/search?keyword=${encodeURIComponent(keyword)}`
+      );
+      if (!response.ok) throw new Error(`Search failed: ${response.status}`);
+      if (!response.body) throw new Error("No response body");
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6);
+          if (payload === "[DONE]") break;
+
+          try {
+            const batch: SearchResult[] = JSON.parse(payload);
+            set({ searchResults: [...get().searchResults, ...batch] });
+          } catch {
+            // skip malformed lines
+          }
+        }
+      }
     } catch (e) {
-      set({ error: String(e), loading: false });
+      set({ error: String(e) });
+    } finally {
+      set({ loading: false });
     }
   },
 

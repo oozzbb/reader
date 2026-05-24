@@ -47,31 +47,43 @@ def _resolve_book_url_template(
     return _re.sub(r"\{\{(.+?)\}\}", replacer, template)
 
 
-async def search_books(keyword: str, source_urls: list[str] | None = None) -> list[SearchResultItem]:
-    """Search across all enabled sources (or specified sources)."""
+async def search_books_stream(keyword: str, source_urls: list[str] | None = None):
+    """Stream search results as each source completes."""
     sources_db = await list_sources(enabled_only=True)
 
     if source_urls:
         sources_db = [s for s in sources_db if s.book_source_url in source_urls]
 
     sem = asyncio.Semaphore(settings.max_concurrent_requests)
+    queue: asyncio.Queue[list[SearchResultItem] | None] = asyncio.Queue()
+
+    async def search_and_enqueue(source: BookSourceSchema):
+        async with sem:
+            try:
+                results = await _do_search(source, keyword)
+                if results:
+                    await queue.put(results)
+            except Exception as e:
+                logger.warning("Search failed for %s: %s", source.bookSourceName, e)
+
     tasks = []
     for source_db in sources_db:
         source = BookSourceSchema.model_validate(json.loads(source_db.source_json))
         if not source.searchUrl:
             continue
-        tasks.append(_search_single_source(source, keyword, sem))
+        tasks.append(asyncio.create_task(search_and_enqueue(source)))
 
-    results_nested = await asyncio.gather(*tasks, return_exceptions=True)
+    async def wait_all():
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await queue.put(None)
 
-    results = []
-    for r in results_nested:
-        if isinstance(r, Exception):
-            logger.warning("Search source failed: %s", r)
-            continue
-        results.extend(r)
+    asyncio.create_task(wait_all())
 
-    return results
+    while True:
+        batch = await queue.get()
+        if batch is None:
+            break
+        yield batch
 
 
 async def _search_single_source(
