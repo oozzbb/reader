@@ -56,6 +56,6 @@ jobs:
             /usr/local/bin/docker run -d \
               --name reader \
               --restart unless-stopped \
-              -p 8080:8080 \
+              -p 8880:8080 \
               -v /volume1/docker/reader/data:/app/data \
               ${DOCKER_USER}/reader:latest"
