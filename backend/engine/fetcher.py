@@ -49,7 +49,10 @@ async def fetch(
             return path.read_text(encoding="utf-8")
 
     client = _get_client()
-    merged_headers = {"User-Agent": settings.user_agent}
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    referer = f"{parsed.scheme}://{parsed.netloc}/"
+    merged_headers = {"User-Agent": settings.user_agent, "Referer": referer}
     if headers:
         merged_headers.update(headers)
 

@@ -2,16 +2,45 @@
 
 import json
 import logging
+import re as _re
 
 from backend.engine.parser import RuleParser
 from backend.engine.fetcher import fetch, parse_headers
 from backend.engine.url_parser import make_absolute_url
-from backend.models.source import BookSourceSchema
+from backend.models.source import BookSourceSchema, BookInfoRule
 from backend.models.book import BookSchema, ChapterSchema
 from backend.services.source_manager import get_source
 from backend.database import get_db
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_book_fields(parser: RuleParser, rule_info: BookInfoRule, content: str | dict, base_url: str) -> dict[str, str]:
+    """Extract book info fields from content for template resolution."""
+    fields = {}
+    for field_name, rule in [
+        ("name", rule_info.name),
+        ("author", rule_info.author),
+        ("kind", rule_info.kind),
+        ("coverUrl", rule_info.coverUrl),
+        ("lastChapter", rule_info.lastChapter),
+    ]:
+        if rule and "{{" not in rule:
+            val = parser.parse(rule, content, base_url)
+            if isinstance(val, list):
+                val = val[0] if val else ""
+            fields[field_name] = val or ""
+    return fields
+
+
+def _resolve_template(template: str, fields: dict[str, str]) -> str:
+    """Resolve {{book.field}} in URL templates."""
+    def replacer(m: _re.Match) -> str:
+        expr = m.group(1)
+        if expr.startswith("book."):
+            return fields.get(expr[5:], "")
+        return ""
+    return _re.sub(r"\{\{(.+?)\}\}", replacer, template)
 
 
 async def get_book_info(book_url: str, source_url: str) -> BookSchema | None:
@@ -60,21 +89,30 @@ async def get_chapters(book_url: str, source_url: str) -> list[ChapterSchema]:
     parser = RuleParser()
     headers = parse_headers(source.header)
 
-    # Determine TOC URL
+    # Fetch book info page
     rule_info = source.ruleBookInfo
     content = await fetch(book_url, headers=headers)
     if not content:
         return []
 
+    # Parse book fields needed for template resolution
+    book_fields = _parse_book_fields(parser, rule_info, content, book_url)
+
+    # Determine TOC URL
     toc_url = book_url
     if rule_info.tocUrl:
-        parsed_toc_url = parser.parse(rule_info.tocUrl, content, book_url)
-        if parsed_toc_url and isinstance(parsed_toc_url, str):
-            toc_url = make_absolute_url(parsed_toc_url, book_url)
-            if toc_url != book_url:
-                content = await fetch(toc_url, headers=headers)
-                if not content:
-                    return []
+        toc_url_rule = rule_info.tocUrl
+        if "{{" in toc_url_rule:
+            toc_url = _resolve_template(toc_url_rule, book_fields)
+        else:
+            parsed_toc_url = parser.parse(toc_url_rule, content, book_url)
+            if parsed_toc_url and isinstance(parsed_toc_url, str):
+                toc_url = parsed_toc_url
+        toc_url = make_absolute_url(toc_url, book_url)
+        if toc_url != book_url:
+            content = await fetch(toc_url, headers=headers)
+            if not content:
+                return []
 
     rule_toc = source.ruleToc
     if not rule_toc.chapterList:
