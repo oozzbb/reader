@@ -36,12 +36,12 @@ jobs:
           host: ${{ secrets.NAS_HOST }}
           port: ${{ secrets.NAS_PORT }}
           username: ${{ secrets.NAS_USER }}
-          password: ${{ secrets.NAS_PASSWORD }}
+          key: ${{ secrets.NAS_SSH_KEY }}
           script: |
-            docker pull ${{ secrets.DOCKER_USERNAME }}/reader:latest
-            docker stop reader 2>/dev/null || true
-            docker rm reader 2>/dev/null || true
-            docker run -d \
+            /usr/local/bin/docker pull ${{ secrets.DOCKER_USERNAME }}/reader:latest
+            /usr/local/bin/docker stop reader 2>/dev/null || true
+            /usr/local/bin/docker rm reader 2>/dev/null || true
+            /usr/local/bin/docker run -d \
               --name reader \
               --restart unless-stopped \
               -p 8080:8080 \
