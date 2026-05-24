@@ -54,6 +54,13 @@ class RuleParser:
             return self._parse_compound(rule, element, base_url)
 
         if isinstance(element, dict):
+            # Handle inline regex: $.field##regex##replacement
+            if "##" in rule and not rule.startswith("##"):
+                parts = rule.split("##", 1)
+                base_result = self.parse_element(parts[0], element, base_url)
+                if base_result:
+                    return regex_parser.parse("##" + parts[1], base_result if isinstance(base_result, str) else str(base_result))
+                return ""
             # JSON element — use jsonpath or direct key access
             if rule.startswith("$.") or rule.startswith("@json:"):
                 return jsonpath_parser.get_value(element, rule)
@@ -72,6 +79,18 @@ class RuleParser:
         return ""
 
     def _parse_single(self, rule: str, content: str | dict | Tag, base_url: str) -> str:
+        # Handle inline regex post-processing: rule##regex##replacement
+        # (e.g. $.groupID##.*_## means: get jsonpath then regex-replace)
+        if "##" in rule and not rule.startswith("##"):
+            parts = rule.split("##", 1)
+            base_rule = parts[0]
+            regex_rule = "##" + parts[1]
+            result = self._parse_single(base_rule, content, base_url)
+            if result:
+                text = result if isinstance(result, str) else str(result)
+                return regex_parser.parse(regex_rule, text)
+            return ""
+
         # JS rules
         if rule.startswith("<js>") or rule.startswith("@js:"):
             text = content if isinstance(content, str) else ""

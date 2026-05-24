@@ -73,6 +73,12 @@ export const api = {
       body: JSON.stringify(sources),
     }),
 
+  importSourcesFromUrl: (url: string) =>
+    request<{ count: number }>("/sources/import-url", {
+      method: "POST",
+      body: JSON.stringify({ url }),
+    }),
+
   toggleSource: (url: string) =>
     request<{ enabled: boolean }>(`/sources/${encodeURIComponent(url)}/toggle`, {
       method: "PUT",

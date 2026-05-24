@@ -240,7 +240,17 @@ async def _fetch_next_content(
 def _clean_content(text: str) -> str:
     if not text:
         return ""
-    # Remove common ad patterns
+    import re
+    # Convert <br>, <br/>, <p> tags to newlines
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<p[^>]*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"</p>", "", text, flags=re.IGNORECASE)
+    # Strip remaining HTML tags
+    text = re.sub(r"<[^>]+>", "", text)
+    # Decode HTML entities
+    import html
+    text = html.unescape(text)
+    # Clean up whitespace
     lines = text.split("\n")
     lines = [line.strip() for line in lines]
     # Remove empty lines at start/end
@@ -248,4 +258,15 @@ def _clean_content(text: str) -> str:
         lines.pop(0)
     while lines and not lines[-1]:
         lines.pop()
-    return "\n".join(lines)
+    # Collapse multiple empty lines
+    result = []
+    prev_empty = False
+    for line in lines:
+        if not line:
+            if not prev_empty:
+                result.append("")
+            prev_empty = True
+        else:
+            result.append(line)
+            prev_empty = False
+    return "\n".join(result)

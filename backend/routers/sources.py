@@ -1,3 +1,6 @@
+import json
+
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -22,8 +25,29 @@ class SourceItem(BaseModel):
     enabled: bool
 
 
+class ImportUrlRequest(BaseModel):
+    url: str
+
+
 @router.post("/import", response_model=ImportResponse)
 async def import_sources(sources: list[dict]):
+    count = await source_manager.import_sources(sources)
+    return ImportResponse(count=count)
+
+
+@router.post("/import-url", response_model=ImportResponse)
+async def import_sources_from_url(req: ImportUrlRequest):
+    try:
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.get(req.url)
+            resp.raise_for_status()
+            data = resp.json()
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="URL did not return valid JSON")
+
+    sources = data if isinstance(data, list) else [data]
     count = await source_manager.import_sources(sources)
     return ImportResponse(count=count)
 

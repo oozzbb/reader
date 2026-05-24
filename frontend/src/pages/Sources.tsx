@@ -6,6 +6,7 @@ export default function Sources() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState("");
+  const [urlInput, setUrlInput] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -43,6 +44,24 @@ export default function Sources() {
     }
   };
 
+  const handleImportUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!urlInput.trim()) return;
+
+    setImporting(true);
+    setMessage("");
+    try {
+      const res = await api.importSourcesFromUrl(urlInput.trim());
+      setMessage(`成功导入 ${res.count} 个书源`);
+      setUrlInput("");
+      await loadSources();
+    } catch (err) {
+      setMessage(`导入失败: ${err}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleToggle = async (url: string) => {
     await api.toggleSource(url);
     await loadSources();
@@ -64,6 +83,25 @@ export default function Sources() {
           />
         </label>
       </div>
+
+      {/* URL import */}
+      <form onSubmit={handleImportUrl} className="flex gap-2 mb-4">
+        <input
+          type="url"
+          value={urlInput}
+          onChange={(e) => setUrlInput(e.target.value)}
+          placeholder="输入书源 JSON 地址..."
+          className="flex-1 px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-primary"
+          disabled={importing}
+        />
+        <button
+          type="submit"
+          disabled={importing || !urlInput.trim()}
+          className="px-3 py-2 bg-primary text-white text-sm rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+        >
+          导入
+        </button>
+      </form>
 
       {message && (
         <div className="text-sm mb-3 p-2 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">

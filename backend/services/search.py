@@ -15,6 +15,38 @@ from backend.services.source_manager import list_sources
 logger = logging.getLogger(__name__)
 
 
+import re as _re
+
+
+def _resolve_book_url_template(
+    template: str,
+    fields: dict[str, str],
+    element,
+    parser: RuleParser,
+    base_url: str,
+) -> str:
+    """Resolve {{book.field}} or {{$.jsonpath}} in bookUrl templates."""
+    def replacer(m: _re.Match) -> str:
+        expr = m.group(1)
+        if expr.startswith("book."):
+            field_name = expr[5:]
+            # Map Legado field names
+            field_map = {
+                "name": "name",
+                "author": "author",
+                "kind": "kind",
+                "coverUrl": "cover_url",
+                "bookUrl": "",
+            }
+            mapped = field_map.get(field_name, field_name)
+            return fields.get(mapped, "")
+        # Try as a rule against the element
+        val = parser.parse_element(expr, element, base_url)
+        return val if isinstance(val, str) else ""
+
+    return _re.sub(r"\{\{(.+?)\}\}", replacer, template)
+
+
 async def search_books(keyword: str, source_urls: list[str] | None = None) -> list[SearchResultItem]:
     """Search across all enabled sources (or specified sources)."""
     sources_db = await list_sources(enabled_only=True)
@@ -95,18 +127,28 @@ async def _do_search(source: BookSourceSchema, keyword: str) -> list[SearchResul
         if not name:
             continue
 
-        book_url = parser.parse_element(rule_search.bookUrl, element, req["url"])
-        book_url = make_absolute_url(book_url, req["url"])
-
         author = parser.parse_element(rule_search.author, element, req["url"])
         cover_url = parser.parse_element(rule_search.coverUrl, element, req["url"])
-        cover_url = make_absolute_url(cover_url, req["url"])
+        cover_url = make_absolute_url(cover_url if isinstance(cover_url, str) else "", req["url"])
         intro = parser.parse_element(rule_search.intro, element, req["url"])
         kind = parser.parse_element(rule_search.kind, element, req["url"])
         last_chapter = parser.parse_element(rule_search.lastChapter, element, req["url"])
 
         if isinstance(name, list):
             name = name[0] if name else ""
+
+        # Resolve bookUrl — may be a selector OR a template with {{book.field}}
+        book_url_rule = rule_search.bookUrl
+        if "{{" in book_url_rule:
+            book_url = _resolve_book_url_template(book_url_rule, {
+                "name": name,
+                "author": author if isinstance(author, str) else "",
+                "kind": kind if isinstance(kind, str) else "",
+                "cover_url": cover_url if isinstance(cover_url, str) else "",
+            }, element, parser, req["url"])
+        else:
+            book_url = parser.parse_element(book_url_rule, element, req["url"])
+        book_url = make_absolute_url(book_url if isinstance(book_url, str) else "", req["url"])
 
         results.append(SearchResultItem(
             name=name,
