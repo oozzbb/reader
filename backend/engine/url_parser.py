@@ -19,6 +19,7 @@ def parse_url(
     keyword: str = "",
     page: int = 1,
     base_url: str = "",
+    source_url: str = "",
 ) -> dict:
     """Parse a Legado URL template into request parameters.
 
@@ -27,7 +28,8 @@ def parse_url(
     if not url_template:
         return {"url": "", "method": "GET", "headers": {}, "body": None, "charset": None}
 
-    url_template = url_template.strip()
+    # Clean whitespace/newlines from URL template
+    url_template = url_template.replace("\n", "").replace("\r", "").strip()
 
     # Variable substitution
     url_template = _substitute_vars(url_template, keyword=keyword, page=page)
@@ -80,7 +82,24 @@ def parse_url(
             body_part = url_template[at_idx + 1:]
             return {"url": url_part, "method": "POST", "headers": headers, "body": body_part, "charset": charset}
 
-    return {"url": url_template, "method": method, "headers": headers, "body": body, "charset": charset}
+    # Resolve relative URLs using source_url origin
+    final_url = url_template
+    if not final_url.startswith("http"):
+        origin = _get_origin(source_url or base_url)
+        if origin:
+            final_url = make_absolute_url(final_url, origin)
+
+    return {"url": final_url, "method": method, "headers": headers, "body": body, "charset": charset}
+
+
+def _get_origin(url: str) -> str:
+    if not url:
+        return ""
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.scheme and parsed.netloc:
+        return f"{parsed.scheme}://{parsed.netloc}"
+    return ""
 
 
 def _substitute_vars(template: str, keyword: str = "", page: int = 1) -> str:

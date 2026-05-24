@@ -72,7 +72,7 @@ async def fetch(
     else:
         text = _detect_encoding(resp.content, resp.headers.get("content-type", ""))
 
-    if use_cache:
+    if use_cache and len(text) > 50:
         key = _cache_key(url, method, body)
         path = _cache_path(key)
         path.write_text(text, encoding="utf-8")

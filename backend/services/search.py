@@ -103,7 +103,7 @@ async def _do_search(source: BookSourceSchema, keyword: str) -> list[SearchResul
     parser = RuleParser()
 
     # Build request
-    req = parse_url(source.searchUrl, keyword=keyword, page=1)
+    req = parse_url(source.searchUrl, keyword=keyword, page=1, source_url=source.bookSourceUrl)
     if not req["url"]:
         return []
 
