@@ -154,6 +154,6 @@ class RuleParser:
         return ""
 
     def _is_jsoup(self, rule: str) -> bool:
-        """Check if rule looks like JSOUP shorthand (class.x, tag.x, id.x)."""
-        prefixes = ("class.", "tag.", "id.", "children")
+        """Check if rule looks like JSOUP shorthand (class.x, tag.x, id.x, text.x)."""
+        prefixes = ("class.", "tag.", "id.", "text.", "children")
         return any(rule.startswith(p) for p in prefixes)

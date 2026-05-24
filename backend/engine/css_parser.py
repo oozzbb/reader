@@ -164,8 +164,13 @@ def _select_jsoup_part(element: Tag | BeautifulSoup, part: str) -> list[Tag]:
     elif selector_type == "tag":
         found = element.find_all(selector_value) if selector_value else []
     elif selector_type == "id":
-        el = element.find(id=selector_value)
-        found = [el] if el else []
+        if index is not None:
+            found = element.find_all(id=selector_value)
+        else:
+            el = element.find(id=selector_value)
+            found = [el] if el else []
+    elif selector_type == "text":
+        found = [el for el in element.find_all(True) if selector_value in (el.get_text() or "")]
     elif selector_type == "children":
         found = [c for c in element.children if isinstance(c, Tag)]
     else:
