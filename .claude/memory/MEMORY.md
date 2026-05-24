@@ -1,0 +1,4 @@
+- [项目架构决策](project-architecture.md) — Python FastAPI + React + SQLite，单容器 Docker 部署到 NAS
+- [书源规则引擎](project-book-source-engine.md) — 兼容 Legado 书源格式，支持 CSS/XPath/JSONPath/JS/Regex 解析
+- [TTS 多后端](project-tts-backends.md) — Edge TTS + sherpa-onnx + OpenAI 兼容 API，可切换
+- [CI/CD 流程](project-cicd.md) — GitHub Actions → Docker Hub → SSH NAS 部署

@@ -1,0 +1,9 @@
+docs/decisions/
+dev-log/
+.env
+.env.local
+data/cache/
+__pycache__/
+*.pyc
+node_modules/
+frontend/dist/

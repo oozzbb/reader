@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>自托管阅读器 — 全局实施方案</title>
+<style>
+  :root {
+    --bg: #fafafa;
+    --card: #ffffff;
+    --text: #1a1a2e;
+    --text2: #5a6070;
+    --border: #e2e6ea;
+    --accent: #2563eb;
+    --accent-light: #eff6ff;
+    --success: #059669;
+    --success-light: #d1fae5;
+    --warn: #d97706;
+    --warn-light: #fef3c7;
+    --danger: #dc2626;
+    --code-bg: #f1f5f9;
+    --table-stripe: #f8fafc;
+    --phase1: #2563eb;
+    --phase2: #7c3aed;
+    --phase3: #059669;
+    --phase4: #d97706;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --border: #334155;
+      --accent: #60a5fa;
+      --accent-light: #1e3a5f;
+      --success: #34d399;
+      --success-light: #064e3b;
+      --warn: #fbbf24;
+      --warn-light: #78350f;
+      --danger: #f87171;
+      --code-bg: #0f172a;
+      --table-stripe: #1e293b;
+      --phase1: #60a5fa;
+      --phase2: #a78bfa;
+      --phase3: #34d399;
+      --phase4: #fbbf24;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+  h2 {
+    font-size: 1.2rem;
+    margin: 2.5rem 0 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--accent);
+    color: var(--accent);
+  }
+  h3 { font-size: 1rem; margin: 1.5rem 0 0.5rem; color: var(--text); }
+  p, li { font-size: 0.9rem; }
+  .subtitle { color: var(--text2); font-size: 0.9rem; margin-bottom: 2rem; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    margin: 0.75rem 0 1.25rem;
+    background: var(--card);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  th {
+    background: var(--accent-light);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  td { padding: 0.55rem 0.7rem; border-top: 1px solid var(--border); }
+  tr:nth-child(even) td { background: var(--table-stripe); }
+
+  code {
+    font-family: "SF Mono", "Fira Code", monospace;
+    font-size: 0.8rem;
+    background: var(--code-bg);
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    margin: 0.75rem 0;
+  }
+  pre code { background: none; padding: 0; }
+
+  /* Phase cards */
+  .phases {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .phase-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-top: 4px solid var(--accent);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  .phase-card.p1 { border-top-color: var(--phase1); }
+  .phase-card.p2 { border-top-color: var(--phase2); }
+  .phase-card.p3 { border-top-color: var(--phase3); }
+  .phase-card.p4 { border-top-color: var(--phase4); }
+  .phase-card h4 {
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+  .phase-card.p1 h4 { color: var(--phase1); }
+  .phase-card.p2 h4 { color: var(--phase2); }
+  .phase-card.p3 h4 { color: var(--phase3); }
+  .phase-card.p4 h4 { color: var(--phase4); }
+  .phase-card ul { list-style: none; padding: 0; }
+  .phase-card li {
+    font-size: 0.825rem;
+    padding: 0.2rem 0;
+    padding-left: 1.2rem;
+    position: relative;
+  }
+  .phase-card li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--text2);
+  }
+
+  /* Decision grid */
+  .decisions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 0.75rem;
+    margin: 1rem 0;
+  }
+  .decision {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--accent);
+    border-radius: 6px;
+    padding: 0.85rem;
+  }
+  .decision strong { display: block; font-size: 0.85rem; margin-bottom: 0.2rem; color: var(--accent); }
+  .decision p { font-size: 0.8rem; color: var(--text2); margin: 0; }
+
+  /* Architecture diagram */
+  .arch-diagram {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem;
+    font-family: "SF Mono", monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    white-space: pre;
+    overflow-x: auto;
+    margin: 1rem 0;
+  }
+
+  /* Reader modes */
+  .reader-modes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .mode-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+  .mode-card h4 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+  .mode-card ul { list-style: none; padding: 0; }
+  .mode-card li { font-size: 0.8rem; padding: 0.15rem 0; color: var(--text2); }
+
+  /* Responsive preview */
+  .responsive-preview {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  .preview-device {
+    background: var(--card);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    padding: 0.5rem;
+    text-align: center;
+  }
+  .preview-device .label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text2);
+    margin-bottom: 0.5rem;
+  }
+  .preview-device .screen {
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 0.75rem;
+    font-size: 0.7rem;
+    text-align: left;
+    min-height: 120px;
+  }
+
+  /* Checklist */
+  .checklist { list-style: none; padding: 0; margin: 0.75rem 0; }
+  .checklist li {
+    padding: 0.35rem 0 0.35rem 1.5rem;
+    position: relative;
+    font-size: 0.85rem;
+  }
+  .checklist li::before {
+    content: "☐";
+    position: absolute;
+    left: 0;
+  }
+
+  /* Tags */
+  .tag {
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    vertical-align: middle;
+  }
+  .tag-p0 { background: #fee2e2; color: #991b1b; }
+  .tag-p1 { background: #fef3c7; color: #92400e; }
+  .tag-p2 { background: #e0e7ff; color: #3730a3; }
+  @media (prefers-color-scheme: dark) {
+    .tag-p0 { background: #7f1d1d; color: #fca5a5; }
+    .tag-p1 { background: #78350f; color: #fcd34d; }
+    .tag-p2 { background: #312e81; color: #a5b4fc; }
+  }
+
+  .risk-high { color: var(--danger); font-weight: 600; }
+  .risk-mid { color: var(--warn); font-weight: 600; }
+  .risk-low { color: var(--success); font-weight: 600; }
+
+  footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text2);
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    body { padding: 1rem; }
+    .responsive-preview { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1>自托管阅读器 — 全局实施方案</h1>
+<p class="subtitle">NAS 部署 · Legado 书源兼容 · 小说/漫画/有声书/RSS · PWA 离线可用</p>
+
+<!-- 核心需求 -->
+<h2>核心需求</h2>
+<table>
+  <tr><th>需求</th><th>优先级</th><th>说明</th></tr>
+  <tr><td>书源引擎</td><td><span class="tag tag-p0">P0</span></td><td>兼容 Legado JSON，自建执行引擎</td></tr>
+  <tr><td>小说阅读</td><td><span class="tag tag-p0">P0</span></td><td>翻页 + 滚动双模式可切换</td></tr>
+  <tr><td>多端自适应</td><td><span class="tag tag-p0">P0</span></td><td>响应式一套代码，移动优先</td></tr>
+  <tr><td>PWA</td><td><span class="tag tag-p0">P0</span></td><td>可安装为独立应用</td></tr>
+  <tr><td>缓存/下载/导出</td><td><span class="tag tag-p0">P0</span></td><td>自动缓存 + 整本下载 + epub/txt 导出</td></tr>
+  <tr><td>漫画阅读</td><td><span class="tag tag-p1">P1</span></td><td>条漫 + 页漫双模式</td></tr>
+  <tr><td>TTS 朗读</td><td><span class="tag tag-p2">P2</span></td><td>多后端，句子高亮</td></tr>
+  <tr><td>有声书</td><td><span class="tag tag-p2">P2</span></td><td>播放器 + 倍速 + 定时</td></tr>
+  <tr><td>RSS</td><td><span class="tag tag-p2">P2</span></td><td>源管理 + 文章阅读</td></tr>
+</table>
+
+<!-- 架构决策 -->
+<h2>全局架构决策</h2>
+<div class="decisions">
+  <div class="decision">
+    <strong>引擎策略</strong>
+    <p>兼容 Legado JSON 格式，自建执行。复用 5400+ 书源选择器。</p>
+  </div>
+  <div class="decision">
+    <strong>响应式方案</strong>
+    <p>Tailwind CSS + 移动优先断点。&lt;768 单栏 / 768-1024 可选侧栏 / &gt;1024 双栏</p>
+  </div>
+  <div class="decision">
+    <strong>手势处理</strong>
+    <p>@use-gesture/react — 翻页滑动、漫画缩放，触摸+鼠标统一</p>
+  </div>
+  <div class="decision">
+    <strong>离线存储</strong>
+    <p>Service Worker + IndexedDB (idb-keyval) — 客户端缓存章节和图片</p>
+  </div>
+  <div class="decision">
+    <strong>PWA</strong>
+    <p>vite-plugin-pwa — standalone 模式，横竖屏均支持</p>
+  </div>
+  <div class="decision">
+    <strong>漫画性能</strong>
+    <p>react-virtuoso 虚拟滚动 + 预加载 — 条漫长列表不卡</p>
+  </div>
+  <div class="decision">
+    <strong>导出</strong>
+    <p>后端 ebooklib (epub) + 纯文本拼接 (txt)</p>
+  </div>
+  <div class="decision">
+    <strong>部署</strong>
+    <p>Docker 单容器，FastAPI 静态 serve 前端产物</p>
+  </div>
+</div>
+
+<!-- 阅读模式 -->
+<h2>阅读器设计</h2>
+
+<h3>小说阅读</h3>
+<div class="reader-modes">
+  <div class="mode-card">
+    <h4>📜 滚动模式</h4>
+    <ul>
+      <li>连续滚动，章节无缝衔接</li>
+      <li>滚动到底自动加载下一章</li>
+      <li>进度条百分比</li>
+      <li>适合快速浏览</li>
+    </ul>
+  </div>
+  <div class="mode-card">
+    <h4>📖 翻页模式</h4>
+    <ul>
+      <li>左右滑动 / 点击翻页</li>
+      <li>内容动态分页（按屏幕尺寸计算）</li>
+      <li>翻页动画（可关闭）</li>
+      <li>适合沉浸阅读</li>
+    </ul>
+  </div>
+</div>
+
+<h3>漫画阅读</h3>
+<div class="reader-modes">
+  <div class="mode-card">
+    <h4>📱 条漫模式（Webtoon）</h4>
+    <ul>
+      <li>图片垂直拼接连续滚动</li>
+      <li>虚拟滚动（只渲染可视区域）</li>
+      <li>预加载前后 3-5 张</li>
+      <li>双击放大</li>
+    </ul>
+  </div>
+  <div class="mode-card">
+    <h4>📚 页漫模式（Manga）</h4>
+    <ul>
+      <li>左右翻页（可设阅读方向）</li>
+      <li>桌面端可选双页并排</li>
+      <li>捏合/双击缩放</li>
+      <li>预加载前后 2 页</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 响应式 -->
+<h2>响应式布局</h2>
+<div class="responsive-preview">
+  <div class="preview-device">
+    <div class="label">Mobile (&lt; 768px)</div>
+    <div class="screen">┌──────────┐
+│ ← 书名   ⚙ │
+├──────────┤
+│            │
+│  正文内容  │
+│  全屏沉浸  │
+│            │
+├──────────┤
+│ ◁  58%  ▷ │
+└──────────┘
+底部导航：🏠 🔍 📚 ⚙</div>
+  </div>
+  <div class="preview-device">
+    <div class="label">Desktop (&gt; 1024px)</div>
+    <div class="screen">┌─────────────────────────────┐
+│  Reader          🔍  ⚙     │
+├────────┬────────────────────┤
+│ 章节   │                    │
+│ 列表   │    正文内容         │
+│        │    居中 max-680px   │
+│ ch.1   │                    │
+│ ch.2 ← │    字号/行距可调    │
+│ ch.3   │                    │
+│ ...    │                    │
+├────────┴────────────────────┤
+│          进度条 58%          │
+└─────────────────────────────┘</div>
+  </div>
+</div>
+
+<!-- 离线架构 -->
+<h2>离线与缓存架构</h2>
+<div class="arch-diagram">┌─────────────────── 前端 (PWA) ───────────────────┐
+│                                                   │
+│  Service Worker                                   │
+│  ├── App Shell 缓存（静态资源）                    │
+│  ├── API 响应缓存（stale-while-revalidate）       │
+│  └── 图片缓存（cache-first）                      │
+│                                                   │
+│  IndexedDB                                        │
+│  ├── chapters/  → 已读章节文本                     │
+│  ├── images/    → 漫画图片                        │
+│  ├── books/     → 书籍元数据                      │
+│  └── progress/  → 阅读进度                        │
+│                                                   │
+│  策略：                                           │
+│  • 已读章节自动缓存                               │
+│  • 阅读时预缓存后续 3 章                          │
+│  • 整本下载：批量写入 IndexedDB                    │
+└───────────────────────────────────────────────────┘
+                    ↕ online sync
+┌─────────────────── 后端 ─────────────────────────┐
+│  文件系统缓存                                     │
+│  ├── data/cache/content/  → 章节文本              │
+│  ├── data/cache/images/   → 图片代理缓存          │
+│  └── download queue       → 整本下载任务          │
+│                                                   │
+│  导出                                             │
+│  ├── POST /api/books/{id}/export?format=epub      │
+│  └── POST /api/books/{id}/export?format=txt       │
+└───────────────────────────────────────────────────┘</div>
+
+<!-- 分阶段 -->
+<h2>分阶段实施</h2>
+<div class="phases">
+  <div class="phase-card p1">
+    <h4>Phase 1 — 骨架 + 引擎 + 基础阅读</h4>
+    <ul>
+      <li>后端：FastAPI + SQLite + 规则引擎</li>
+      <li>引擎：CSS/XPath/JSONPath/Regex/简单 JS</li>
+      <li>API：书源管理 + 搜索 + 内容获取</li>
+      <li>前端：响应式骨架 + PWA 基础</li>
+      <li>阅读：小说滚动模式（先跑通全流程）</li>
+      <li>缓存：IndexedDB 已读章节</li>
+      <li>设置：字号/行距/主题</li>
+      <li>部署：Dockerfile</li>
+    </ul>
+  </div>
+  <div class="phase-card p2">
+    <h4>Phase 2 — 完整阅读体验</h4>
+    <ul>
+      <li>翻页模式（手势 + 动画 + 分页算法）</li>
+      <li>漫画阅读器（条漫 + 页漫）</li>
+      <li>整本下载 + 进度显示</li>
+      <li>导出 epub / txt</li>
+      <li>书架管理（收藏/分类/更新检测）</li>
+      <li>阅读进度多设备同步</li>
+    </ul>
+  </div>
+  <div class="phase-card p3">
+    <h4>Phase 3 — TTS + 有声书 + RSS</h4>
+    <ul>
+      <li>TTS 多后端（Edge/sherpa/API）</li>
+      <li>WebSocket 流式音频 + 高亮</li>
+      <li>有声书源解析 + 播放器</li>
+      <li>RSS 管理 + 文章阅读</li>
+      <li>图片防盗链处理增强</li>
+    </ul>
+  </div>
+  <div class="phase-card p4">
+    <h4>Phase 4 — 打磨</h4>
+    <ul>
+      <li>JS bridge 完整实现（crypto/put/get）</li>
+      <li>WebView 规则（可选 headless）</li>
+      <li>阅读统计</li>
+      <li>多用户支持</li>
+      <li>自动更新通知</li>
+    </ul>
+  </div>
+</div>
+
+<!-- Phase 1 技术栈 -->
+<h2>Phase 1 技术栈</h2>
+<table>
+  <tr><th>层</th><th>选型</th><th>版本</th></tr>
+  <tr><td>后端框架</td><td>FastAPI + uvicorn</td><td>≥0.104</td></tr>
+  <tr><td>数据库</td><td>SQLite + aiosqlite</td><td>≥0.19</td></tr>
+  <tr><td>HTTP</td><td>httpx (async)</td><td>≥0.25</td></tr>
+  <tr><td>HTML 解析</td><td>BeautifulSoup4 + lxml</td><td>≥4.12</td></tr>
+  <tr><td>JSON 解析</td><td>jsonpath-ng</td><td>≥1.6</td></tr>
+  <tr><td>JS 沙盒</td><td>pyquickjs (quickjs)</td><td>≥1.19</td></tr>
+  <tr><td>编码检测</td><td>charset-normalizer</td><td>≥3.3</td></tr>
+  <tr><td>前端</td><td>React + TypeScript</td><td>18.3 / 5.3</td></tr>
+  <tr><td>构建</td><td>Vite</td><td>≥5.4</td></tr>
+  <tr><td>样式</td><td>Tailwind CSS</td><td>≥3.4</td></tr>
+  <tr><td>状态</td><td>Zustand + persist</td><td>≥4.4</td></tr>
+  <tr><td>离线</td><td>idb-keyval + vite-plugin-pwa</td><td>≥6.2 / ≥0.17</td></tr>
+  <tr><td>手势</td><td>@use-gesture/react</td><td>≥10.3</td></tr>
+</table>
+
+<!-- Phase 1 API -->
+<h2>Phase 1 API 设计</h2>
+<table>
+  <tr><th>方法</th><th>路径</th><th>功能</th></tr>
+  <tr><td><code>POST</code></td><td>/api/sources/import</td><td>批量导入书源 JSON</td></tr>
+  <tr><td><code>GET</code></td><td>/api/sources</td><td>书源列表（分组筛选）</td></tr>
+  <tr><td><code>PUT</code></td><td>/api/sources/{url}/toggle</td><td>启用/禁用</td></tr>
+  <tr><td><code>DELETE</code></td><td>/api/sources/{url}</td><td>删除</td></tr>
+  <tr><td><code>GET</code></td><td>/api/search?keyword=</td><td>多源聚合搜索</td></tr>
+  <tr><td><code>GET</code></td><td>/api/books/{id}/info</td><td>书籍详情</td></tr>
+  <tr><td><code>GET</code></td><td>/api/books/{id}/chapters</td><td>章节列表</td></tr>
+  <tr><td><code>GET</code></td><td>/api/content/{book_id}/{chapter_idx}</td><td>章节正文</td></tr>
+</table>
+
+<!-- Phase 1 完成标准 -->
+<h2>Phase 1 完成标准</h2>
+<ul class="checklist">
+  <li>5 个不同类型书源（CSS/XPath/JSON/JS/Regex）搜索→阅读流程跑通</li>
+  <li>pytest 覆盖引擎核心逻辑（单元测试）</li>
+  <li>手机浏览器可安装 PWA，standalone 模式运行</li>
+  <li>离线可重读已缓存章节（IndexedDB 验证）</li>
+  <li>响应式布局：手机 / 平板 / 桌面均正确</li>
+  <li>docker build 成功且容器正常启动</li>
+  <li>搜索响应 &lt; 10s（网络正常）</li>
+</ul>
+
+<!-- 风险 -->
+<h2>风险与对策</h2>
+<table>
+  <tr><th>风险</th><th>概率</th><th>对策</th></tr>
+  <tr><td>pyquickjs JS 语法兼容</td><td class="risk-mid">中</td><td>Phase 1 只用简单 JS；备选 dukpy</td></tr>
+  <tr><td>JSOUP 语法适配 BS4</td><td class="risk-mid">中</td><td>写适配层，参考 Legado 源码</td></tr>
+  <tr><td>网站反爬</td><td class="risk-high">高</td><td>自定义 UA/headers；后续代理池</td></tr>
+  <tr><td>翻页分页算法（Phase 2）</td><td class="risk-mid">中</td><td>Phase 1 不做翻页，专项攻克</td></tr>
+  <tr><td>IndexedDB 容量</td><td class="risk-low">低</td><td>存储管理 + 超限提示</td></tr>
+  <tr><td>epub 生成质量</td><td class="risk-low">低</td><td>ebooklib 成熟库</td></tr>
+</table>
+
+<footer>
+  自托管阅读器 · 全局实施方案 · 2026-05-24
+</footer>
+
+</body>
+</html>
