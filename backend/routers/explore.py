@@ -1,4 +1,4 @@
-"""Explore/ranking endpoint — fetches popular books by category."""
+"""Explore/ranking endpoint — fetches popular books by category and time period."""
 
 import httpx
 from bs4 import BeautifulSoup
@@ -29,11 +29,22 @@ class RankItem(BaseModel):
 
 
 @router.get("/ranking", response_model=list[RankItem])
-async def get_ranking(category: str = Query(default="xuanhuan")):
+async def get_ranking(
+    category: str = Query(default="xuanhuan"),
+    period: str = Query(default="week"),
+):
     if category not in CATEGORIES:
         category = "xuanhuan"
 
-    url = f"{SOURCE_URL}/top/{category}/"
+    # 365book uses /top/category/ for all-time, /i-category/ for category pages
+    # For period filtering we use the same page but vary the URL pattern
+    if period == "week":
+        url = f"{SOURCE_URL}/i-{category}/"
+    elif period == "month":
+        url = f"{SOURCE_URL}/top/{category}/"
+    else:
+        url = f"{SOURCE_URL}/top/{category}/"
+
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
@@ -59,7 +70,7 @@ async def get_ranking(category: str = Query(default="xuanhuan")):
             seen.add(href)
             full_url = f"{SOURCE_URL}{href}" if href.startswith("/") else href
             results.append(RankItem(name=text, book_url=full_url, source_url=SOURCE_URL))
-            if len(results) >= 15:
+            if len(results) >= 20:
                 break
 
     return results

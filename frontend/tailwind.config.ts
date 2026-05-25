@@ -6,7 +6,7 @@ export default {
     extend: {
       maxWidth: {
         reader: "640px",
-        app: "520px",
+        app: "960px",
       },
     },
   },
