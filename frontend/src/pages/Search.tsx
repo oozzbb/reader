@@ -5,13 +5,11 @@ import { useBookStore } from "@/stores/bookStore";
 export default function Search() {
   const [params] = useSearchParams();
   const keyword = params.get("keyword") || "";
-  const { searchResults, loading, error, search } = useBookStore();
+  const { searchResults, loading, search } = useBookStore();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (keyword) {
-      search(keyword);
-    }
+    if (keyword) search(keyword);
   }, [keyword, search]);
 
   const handleBookClick = (bookUrl: string, sourceUrl: string) => {
@@ -22,54 +20,35 @@ export default function Search() {
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4">
-        搜索: {keyword}
-        <span className="ml-2 text-sm text-gray-500">
-          {loading ? `搜索中... (${searchResults.length} 条)` : `${searchResults.length} 条结果`}
-        </span>
-      </h2>
+      <div className="mb-8">
+        <h2 className="text-base text-ink">{keyword}</h2>
+        <p className="text-xs text-ink-muted mt-1">
+          {loading ? `搜索中 (${searchResults.length})` : `${searchResults.length} 个结果`}
+        </p>
+      </div>
 
-      {error && (
-        <div className="text-red-500 text-sm mb-4">{error}</div>
-      )}
-
-      <div className="grid gap-3">
+      <div className="divide-y divide-ink-faint/20">
         {searchResults.map((item, i) => (
-          <div
+          <button
             key={`${item.book_url}-${i}`}
             onClick={() => handleBookClick(item.book_url, item.source_url)}
-            className="flex gap-3 p-3 rounded-lg bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-primary transition-colors"
+            className="w-full text-left py-4 group"
           >
-            {item.cover_url && (
-              <img
-                src={item.cover_url}
-                alt={item.name}
-                className="w-12 h-16 object-cover rounded flex-shrink-0"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = "none";
-                }}
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-sm truncate">{item.name}</h3>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                {item.author}
-                {item.source_name && (
-                  <span className="ml-2 text-gray-400">· {item.source_name}</span>
-                )}
-              </p>
-              {item.intro && (
-                <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                  {item.intro}
-                </p>
+            <p className="text-[15px] text-ink group-hover:text-accent transition-colors">
+              {item.name}
+            </p>
+            <p className="text-xs text-ink-muted mt-1">
+              {item.author}
+              {item.source_name && (
+                <span className="ml-2 text-ink-faint">· {item.source_name}</span>
               )}
-            </div>
-          </div>
+            </p>
+          </button>
         ))}
       </div>
 
       {!loading && searchResults.length === 0 && keyword && (
-        <p className="text-center text-gray-500 mt-8">未找到结果</p>
+        <p className="text-sm text-ink-muted pt-8 text-center">未找到相关书籍</p>
       )}
     </div>
   );

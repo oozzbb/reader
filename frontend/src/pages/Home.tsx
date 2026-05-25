@@ -8,19 +8,33 @@ interface RankItem {
   source_url: string;
 }
 
+const CATEGORIES = [
+  { key: "xuanhuan", label: "玄幻" },
+  { key: "dushi", label: "都市" },
+  { key: "xianxia", label: "仙侠" },
+  { key: "yanqing", label: "言情" },
+  { key: "kehuan", label: "科幻" },
+  { key: "lishi", label: "历史" },
+  { key: "wuxia", label: "武侠" },
+];
+
 export default function Home() {
   const [keyword, setKeyword] = useState("");
   const [progress, setProgress] = useState<ProgressItem[]>([]);
   const [ranking, setRanking] = useState<RankItem[]>([]);
+  const [activeCategory, setActiveCategory] = useState("xuanhuan");
   const navigate = useNavigate();
 
   useEffect(() => {
     api.getProgressList().then(setProgress).catch(() => {});
-    fetch("/api/explore/ranking")
+  }, []);
+
+  useEffect(() => {
+    fetch(`/api/explore/ranking?category=${activeCategory}`)
       .then((r) => r.json())
       .then(setRanking)
-      .catch(() => {});
-  }, []);
+      .catch(() => setRanking([]));
+  }, [activeCategory]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,83 +56,90 @@ export default function Home() {
   };
 
   return (
-    <div className="flex flex-col items-center pt-8">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-gray-100">
-        Reader
-      </h1>
-      <form onSubmit={handleSearch} className="w-full max-w-md mb-6">
-        <div className="relative">
-          <input
-            type="text"
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
-            placeholder="搜索书名或作者..."
-            className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent text-base"
-            autoFocus
-          />
-          <button
-            type="submit"
-            className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-primary text-white rounded-md text-sm font-medium hover:bg-blue-700 transition-colors"
-          >
-            搜索
-          </button>
-        </div>
+    <div className="space-y-12">
+      {/* Search */}
+      <form onSubmit={handleSearch}>
+        <input
+          type="text"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          placeholder="搜索书名或作者"
+          className="w-full py-3 bg-transparent border-b border-ink-faint/50 text-ink placeholder:text-ink-muted/60 focus:outline-none focus:border-ink-light text-base font-serif transition-colors"
+        />
       </form>
 
-      <div className="w-full max-w-md space-y-6">
-        {/* Continue reading */}
-        {progress.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">
-              继续阅读
-            </h2>
-            <div className="grid gap-2">
-              {progress.slice(0, 5).map((item) => (
-                <button
-                  key={item.book_url}
-                  onClick={() => handleContinue(item)}
-                  className="flex items-center justify-between p-3 rounded-lg bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-700 text-left hover:border-primary transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{item.book_name}</p>
-                    <p className="text-xs text-gray-500 truncate mt-0.5">
-                      {item.chapter_title}
-                    </p>
-                  </div>
-                  <span className="text-xs text-gray-400 ml-2 flex-shrink-0">
-                    第{item.chapter_idx + 1}章
-                  </span>
-                </button>
-              ))}
-            </div>
+      {/* Continue reading */}
+      {progress.length > 0 && (
+        <section>
+          <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-4">
+            继续阅读
+          </h2>
+          <div className="space-y-0 divide-y divide-ink-faint/20">
+            {progress.slice(0, 3).map((item) => (
+              <button
+                key={item.book_url}
+                onClick={() => handleContinue(item)}
+                className="w-full text-left py-4 group"
+              >
+                <p className="text-base text-ink group-hover:text-accent transition-colors">
+                  {item.book_name}
+                </p>
+                <p className="text-sm text-ink-muted mt-1">
+                  {item.chapter_title}
+                </p>
+              </button>
+            ))}
           </div>
-        )}
+        </section>
+      )}
 
-        {/* Ranking */}
-        {ranking.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">
-              热门排行
-            </h2>
-            <div className="grid gap-1">
-              {ranking.map((item, i) => (
-                <button
-                  key={item.book_url}
-                  onClick={() => handleRankClick(item)}
-                  className="flex items-center p-2.5 rounded-lg text-left hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-                >
-                  <span className={`w-6 text-center text-sm font-bold flex-shrink-0 ${
-                    i < 3 ? "text-primary" : "text-gray-400"
-                  }`}>
-                    {i + 1}
-                  </span>
-                  <span className="text-sm ml-2 truncate">{item.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Discover - Category tabs */}
+      <section>
+        <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-5">
+          发现
+        </h2>
+
+        {/* Tabs */}
+        <div className="flex gap-0 overflow-x-auto scrollbar-none mb-6 -mx-1">
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.key}
+              onClick={() => setActiveCategory(cat.key)}
+              className={`px-3 py-2 text-sm whitespace-nowrap transition-all ${
+                activeCategory === cat.key
+                  ? "tab-active font-medium"
+                  : "tab-inactive hover:text-ink-light"
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Book list */}
+        <div className="space-y-0">
+          {ranking.length > 0 ? (
+            ranking.map((item, i) => (
+              <button
+                key={item.book_url}
+                onClick={() => handleRankClick(item)}
+                className="w-full text-left flex items-baseline py-3 border-b border-ink-faint/15 last:border-0 group"
+              >
+                <span className={`w-5 text-sm tabular-nums flex-shrink-0 ${
+                  i < 3 ? "text-ink font-medium" : "text-ink-faint"
+                }`}>
+                  {i + 1}
+                </span>
+                <span className="text-[15px] text-ink ml-3 group-hover:text-accent transition-colors truncate">
+                  {item.name}
+                </span>
+              </button>
+            ))
+          ) : (
+            <p className="text-sm text-ink-muted py-4">加载中...</p>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

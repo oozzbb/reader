@@ -5,11 +5,9 @@ interface BookItem {
   id: number;
   name: string;
   author: string;
-  cover_url: string;
   book_url: string;
   source_url: string;
   total_chapters: number;
-  updated_at: string;
 }
 
 export default function Shelf() {
@@ -32,42 +30,38 @@ export default function Shelf() {
   };
 
   if (loading) {
-    return <p className="text-center py-8 text-gray-500">加载中...</p>;
+    return <p className="text-sm text-ink-muted">...</p>;
   }
 
   if (books.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-500">
-        <p className="text-lg mb-2">书架空空</p>
-        <p className="text-sm">搜索书籍后点击"加入书架"</p>
+      <div className="pt-12 text-center">
+        <p className="text-ink-muted text-sm">书架尚空</p>
+        <p className="text-ink-faint text-xs mt-2">搜索后可将书籍加入书架</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-lg font-semibold mb-4">书架</h2>
-      <div className="grid gap-3">
+      <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-6">
+        书架
+      </h2>
+      <div className="divide-y divide-ink-faint/20">
         {books.map((book) => (
-          <div
+          <button
             key={book.id}
             onClick={() => handleClick(book)}
-            className="flex gap-3 p-3 rounded-lg bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-primary transition-colors"
+            className="w-full text-left py-4 group"
           >
-            {book.cover_url && (
-              <img
-                src={book.cover_url}
-                alt={book.name}
-                className="w-12 h-16 object-cover rounded flex-shrink-0"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
-            )}
-            <div className="flex-1 min-w-0">
-              <h3 className="font-medium text-sm truncate">{book.name}</h3>
-              <p className="text-xs text-gray-500 mt-0.5">{book.author}</p>
-              <p className="text-xs text-gray-400 mt-1">{book.total_chapters} 章</p>
-            </div>
-          </div>
+            <p className="text-base text-ink group-hover:text-accent transition-colors">
+              {book.name}
+            </p>
+            <p className="text-sm text-ink-muted mt-1">
+              {book.author && <span>{book.author} · </span>}
+              {book.total_chapters} 章
+            </p>
+          </button>
         ))}
       </div>
     </div>

@@ -14,7 +14,6 @@ export default function BookDetail() {
 
   useEffect(() => {
     if (!bookUrl || !sourceUrl) return;
-
     setLoading(true);
     Promise.all([
       api.getBookInfo(bookUrl, sourceUrl).catch(() => null),
@@ -33,73 +32,71 @@ export default function BookDetail() {
     );
   };
 
+  const handleAddToShelf = () => {
+    fetch("/api/books", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: info?.name || "",
+        author: info?.author || "",
+        cover_url: info?.cover_url || "",
+        intro: info?.intro || "",
+        book_url: bookUrl,
+        source_url: sourceUrl,
+        total_chapters: chapters.length,
+      }),
+    }).then(() => setMessage("已加入书架"));
+  };
+
+  const [message, setMessage] = useState("");
+
   if (loading) {
-    return <div className="text-center py-8 text-gray-500">加载中...</div>;
+    return <p className="text-sm text-ink-muted">...</p>;
   }
 
   return (
     <div>
-      {/* Book info header */}
+      {/* Book info */}
       {info && (
-        <div className="flex gap-4 mb-6">
-          {info.cover_url && (
-            <img
-              src={info.cover_url}
-              alt={info.name}
-              className="w-20 h-28 object-cover rounded-lg flex-shrink-0"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = "none";
-              }}
-            />
+        <header className="mb-10">
+          <h1 className="text-xl font-semibold text-ink leading-tight">
+            {info.name}
+          </h1>
+          <p className="text-sm text-ink-muted mt-2">{info.author}</p>
+          {info.intro && (
+            <p className="text-sm text-ink-light mt-4 leading-relaxed line-clamp-3">
+              {info.intro}
+            </p>
           )}
-          <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold">{info.name}</h1>
-            <p className="text-sm text-gray-500 mt-1">{info.author}</p>
-            {info.intro && (
-              <p className="text-xs text-gray-500 mt-2 line-clamp-3">
-                {info.intro}
-              </p>
-            )}
+          <div className="flex items-center gap-4 mt-4">
             <button
-              onClick={() => {
-                api.importSources([]).catch(() => {}); // no-op, just using existing pattern
-                fetch("/api/books", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    name: info.name,
-                    author: info.author,
-                    cover_url: info.cover_url,
-                    intro: info.intro,
-                    book_url: bookUrl,
-                    source_url: sourceUrl,
-                    total_chapters: chapters.length,
-                  }),
-                }).then(() => alert("已加入书架"));
-              }}
-              className="mt-2 px-3 py-1 text-xs bg-primary text-white rounded hover:bg-blue-700 transition-colors"
+              onClick={handleAddToShelf}
+              className="text-xs text-accent hover:underline transition-colors"
             >
               加入书架
             </button>
+            {message && <span className="text-xs text-ink-muted">{message}</span>}
           </div>
-        </div>
+        </header>
       )}
 
       {/* Chapter list */}
-      <h2 className="text-base font-semibold mb-3 border-b pb-2 border-gray-200 dark:border-gray-700">
-        目录 ({chapters.length} 章)
-      </h2>
-      <div className="grid gap-1">
-        {chapters.map((ch) => (
-          <button
-            key={ch.idx}
-            onClick={() => handleChapterClick(ch)}
-            className="text-left px-3 py-2 text-sm rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors truncate"
-          >
-            {ch.title}
-          </button>
-        ))}
-      </div>
+      <section>
+        <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-4">
+          目录 · {chapters.length} 章
+        </h2>
+        <div className="divide-y divide-ink-faint/15">
+          {chapters.map((ch) => (
+            <button
+              key={ch.idx}
+              onClick={() => handleChapterClick(ch)}
+              className="w-full text-left py-3 text-sm text-ink hover:text-accent transition-colors truncate"
+            >
+              {ch.title}
+            </button>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

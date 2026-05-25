@@ -2,10 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-  height: 100%;
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  html, body, #root {
+    height: 100%;
+  }
+
+  body {
+    font-family: "Noto Serif SC", Georgia, serif;
+    background-color: #fafaf8;
+    color: #1a1a1a;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  ::selection {
+    background-color: #2c528220;
+  }
 }
 
-body {
-  -webkit-tap-highlight-color: transparent;
+@layer components {
+  .tab-active {
+    color: #1a1a1a;
+    border-bottom: 1.5px solid #1a1a1a;
+  }
+
+  .tab-inactive {
+    color: #8a8a8a;
+    border-bottom: 1.5px solid transparent;
+  }
+
+  .divider {
+    border-bottom: 1px solid #e8e6e3;
+  }
 }

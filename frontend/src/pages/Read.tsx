@@ -146,12 +146,12 @@ export default function Read() {
   const hasNext = chapters.some((ch) => ch.idx === lastIdx + 1);
 
   const themeStyles = {
-    light: "bg-white text-gray-900",
-    dark: "bg-gray-900 text-gray-100",
-    sepia: "bg-[#f4ecd8] text-[#5b4636]",
+    light: "bg-paper text-ink",
+    dark: "bg-paper-dark text-gray-200",
+    sepia: "bg-[#f5f0e8] text-[#3d3425]",
   };
 
-  const paddingMap = { sm: "px-3", md: "px-5", lg: "px-8" };
+  const paddingMap = { sm: "px-4", md: "px-6", lg: "px-10" };
 
   return (
     <div
@@ -191,10 +191,10 @@ export default function Read() {
             data-chapter-idx={ch.idx}
             className="mb-8"
           >
-            <h2 className="text-center font-bold mb-6 text-lg opacity-80 border-b border-gray-200 dark:border-gray-700 pb-4">
+            <h2 className="text-center font-medium mb-8 text-sm text-ink-muted tracking-wide">
               {ch.title}
             </h2>
-            <div className="whitespace-pre-wrap leading-relaxed">{ch.content}</div>
+            <div className="whitespace-pre-wrap leading-[1.9] font-serif text-ink/90">{ch.content}</div>
           </section>
         ))}
 
@@ -216,7 +216,7 @@ export default function Read() {
 
       {/* Bottom nav */}
       <div
-        className="fixed bottom-0 inset-x-0 z-40 flex items-center justify-between px-4 py-3 bg-black/80 text-white backdrop-blur-sm border-t border-white/10"
+        className="fixed bottom-0 inset-x-0 z-40 flex items-center justify-between px-6 py-3 bg-paper/95 backdrop-blur-sm border-t border-ink-faint/20 text-ink"
         onClick={(e) => e.stopPropagation()}
       >
         <button
@@ -248,23 +248,23 @@ export default function Read() {
           onClick={() => setShowToc(false)}
         >
           <div
-            className="w-72 max-w-[80vw] h-full bg-white dark:bg-gray-900 shadow-xl overflow-y-auto"
+            className="w-72 max-w-[80vw] h-full bg-paper shadow-2xl overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900">
-              <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100">
-                目录 ({chapters.length} 章)
+            <div className="sticky top-0 px-5 py-4 border-b border-ink-faint/20 bg-paper">
+              <h3 className="text-xs tracking-widest uppercase text-ink-muted">
+                目录 · {chapters.length} 章
               </h3>
             </div>
-            <div className="py-1">
+            <div className="py-2">
               {chapters.map((ch) => (
                 <button
                   key={ch.idx}
                   onClick={() => goToChapter(ch)}
-                  className={`block w-full text-left px-4 py-2 text-sm truncate transition-colors ${
+                  className={`block w-full text-left px-5 py-2.5 text-sm truncate transition-colors ${
                     ch.idx === currentViewIdx
-                      ? "bg-blue-50 dark:bg-blue-900/30 text-primary font-medium"
-                      : "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      ? "text-accent font-medium"
+                      : "text-ink-light hover:text-ink"
                   }`}
                 >
                   {ch.title}
@@ -272,7 +272,7 @@ export default function Read() {
               ))}
             </div>
           </div>
-          <div className="flex-1 bg-black/50" />
+          <div className="flex-1 bg-black/30" />
         </div>
       )}
 
