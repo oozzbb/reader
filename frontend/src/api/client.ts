@@ -88,4 +88,29 @@ export const api = {
     request<void>(`/sources/${encodeURIComponent(url)}`, {
       method: "DELETE",
     }),
+
+  saveProgress: (data: {
+    book_url: string;
+    source_url: string;
+    book_name: string;
+    chapter_idx: number;
+    chapter_title: string;
+    chapter_url: string;
+  }) =>
+    request<void>("/progress", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getProgressList: () => request<ProgressItem[]>("/progress"),
 };
+
+export interface ProgressItem {
+  book_url: string;
+  source_url: string;
+  book_name: string;
+  chapter_idx: number;
+  chapter_title: string;
+  chapter_url: string;
+  updated_at: string;
+}

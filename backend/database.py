@@ -44,12 +44,13 @@ CREATE TABLE IF NOT EXISTS chapters (
 CREATE INDEX IF NOT EXISTS idx_chapters_book ON chapters(book_id, idx);
 
 CREATE TABLE IF NOT EXISTS reading_progress (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    book_id INTEGER NOT NULL UNIQUE,
+    book_url TEXT PRIMARY KEY,
+    source_url TEXT NOT NULL,
+    book_name TEXT DEFAULT '',
     chapter_idx INTEGER DEFAULT 0,
-    scroll_position REAL DEFAULT 0,
-    updated_at TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+    chapter_title TEXT DEFAULT '',
+    chapter_url TEXT DEFAULT '',
+    updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS user_settings (

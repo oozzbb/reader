@@ -1,9 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { api, ProgressItem } from "@/api/client";
 
 export default function Home() {
   const [keyword, setKeyword] = useState("");
+  const [progress, setProgress] = useState<ProgressItem[]>([]);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    api.getProgressList().then(setProgress).catch(() => {});
+  }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -12,12 +18,18 @@ export default function Home() {
     }
   };
 
+  const handleContinue = (item: ProgressItem) => {
+    navigate(
+      `/read?url=${encodeURIComponent(item.chapter_url)}&source_url=${encodeURIComponent(item.source_url)}&title=${encodeURIComponent(item.chapter_title)}&idx=${item.chapter_idx}&book_url=${encodeURIComponent(item.book_url)}`
+    );
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center min-h-[60vh]">
+    <div className="flex flex-col items-center pt-12">
       <h1 className="text-3xl font-bold mb-8 text-gray-800 dark:text-gray-100">
         Reader
       </h1>
-      <form onSubmit={handleSearch} className="w-full max-w-md">
+      <form onSubmit={handleSearch} className="w-full max-w-md mb-8">
         <div className="relative">
           <input
             type="text"
@@ -35,6 +47,34 @@ export default function Home() {
           </button>
         </div>
       </form>
+
+      {/* Continue reading */}
+      {progress.length > 0 && (
+        <div className="w-full max-w-md">
+          <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">
+            继续阅读
+          </h2>
+          <div className="grid gap-2">
+            {progress.map((item) => (
+              <button
+                key={item.book_url}
+                onClick={() => handleContinue(item)}
+                className="flex items-center justify-between p-3 rounded-lg bg-surface dark:bg-surface-dark border border-gray-200 dark:border-gray-700 text-left hover:border-primary transition-colors"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{item.book_name}</p>
+                  <p className="text-xs text-gray-500 truncate mt-0.5">
+                    {item.chapter_title}
+                  </p>
+                </div>
+                <span className="text-xs text-gray-400 ml-2 flex-shrink-0">
+                  第{item.chapter_idx + 1}章
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

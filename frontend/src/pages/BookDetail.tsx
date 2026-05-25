@@ -51,7 +51,7 @@ export default function BookDetail() {
               }}
             />
           )}
-          <div>
+          <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold">{info.name}</h1>
             <p className="text-sm text-gray-500 mt-1">{info.author}</p>
             {info.intro && (
@@ -59,6 +59,27 @@ export default function BookDetail() {
                 {info.intro}
               </p>
             )}
+            <button
+              onClick={() => {
+                api.importSources([]).catch(() => {}); // no-op, just using existing pattern
+                fetch("/api/books", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    name: info.name,
+                    author: info.author,
+                    cover_url: info.cover_url,
+                    intro: info.intro,
+                    book_url: bookUrl,
+                    source_url: sourceUrl,
+                    total_chapters: chapters.length,
+                  }),
+                }).then(() => alert("已加入书架"));
+              }}
+              className="mt-2 px-3 py-1 text-xs bg-primary text-white rounded hover:bg-blue-700 transition-colors"
+            >
+              加入书架
+            </button>
           </div>
         </div>
       )}

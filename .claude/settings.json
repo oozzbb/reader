@@ -79,11 +79,5 @@
         ]
       }
     ]
-  },
-
-  "statusLine": {
-    "type": "command",
-    "command": "bash scripts/statusline.sh",
-    "padding": 0
   }
 }
