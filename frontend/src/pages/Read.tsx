@@ -16,6 +16,7 @@ export default function Read() {
   const sourceUrl = params.get("source_url") || "";
   const title = params.get("title") || "";
   const bookUrl = params.get("book_url") || "";
+  const bookName = params.get("book_name") || "";
   const startIdx = parseInt(params.get("idx") || "0");
   const navigate = useNavigate();
 
@@ -90,12 +91,12 @@ export default function Read() {
     api.saveProgress({
       book_url: bookUrl,
       source_url: sourceUrl,
-      book_name: title,
+      book_name: bookName || title,
       chapter_idx: currentViewIdx,
       chapter_title: ch.title,
       chapter_url: ch.url,
     }).catch(() => {});
-  }, [currentViewIdx, bookUrl, sourceUrl, chapters, title]);
+  }, [currentViewIdx, bookUrl, sourceUrl, chapters, bookName, title]);
 
   const loadNextChapter = useCallback(() => {
     if (loading || loadedChapters.length === 0 || chapters.length === 0) return;
@@ -129,6 +130,7 @@ export default function Read() {
       title: chapter.title,
       idx: String(chapter.idx),
       book_url: bookUrl,
+      book_name: bookName,
     });
     setShowToc(false);
     setShowToolbar(false);

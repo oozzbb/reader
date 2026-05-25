@@ -27,8 +27,9 @@ export default function BookDetail() {
   }, [bookUrl, sourceUrl]);
 
   const handleChapterClick = (chapter: Chapter) => {
+    const bookName = info?.name || "";
     navigate(
-      `/read?url=${encodeURIComponent(chapter.url)}&source_url=${encodeURIComponent(sourceUrl)}&title=${encodeURIComponent(chapter.title)}&idx=${chapter.idx}&book_url=${encodeURIComponent(bookUrl)}`
+      `/read?url=${encodeURIComponent(chapter.url)}&source_url=${encodeURIComponent(sourceUrl)}&title=${encodeURIComponent(chapter.title)}&idx=${chapter.idx}&book_url=${encodeURIComponent(bookUrl)}&book_name=${encodeURIComponent(bookName)}`
     );
   };
 

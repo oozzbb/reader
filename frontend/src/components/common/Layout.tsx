@@ -2,6 +2,7 @@ import { Outlet, NavLink } from "react-router-dom";
 
 const navItems = [
   { to: "/", label: "首页", icon: "🏠" },
+  { to: "/shelf", label: "书架", icon: "📖" },
   { to: "/sources", label: "书源", icon: "📚" },
 ];
 
