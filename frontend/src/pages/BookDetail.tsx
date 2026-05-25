@@ -11,6 +11,7 @@ export default function BookDetail() {
   const [info, setInfo] = useState<BookInfo | null>(null);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [added, setAdded] = useState(false);
 
   useEffect(() => {
     if (!bookUrl || !sourceUrl) return;
@@ -45,52 +46,50 @@ export default function BookDetail() {
         source_url: sourceUrl,
         total_chapters: chapters.length,
       }),
-    }).then(() => setMessage("已加入书架"));
+    }).then(() => setAdded(true));
   };
 
-  const [message, setMessage] = useState("");
-
-  if (loading) {
-    return <p className="text-sm text-ink-muted">...</p>;
-  }
+  if (loading) return null;
 
   return (
     <div>
-      {/* Book info */}
+      {/* Header */}
       {info && (
-        <header className="mb-10">
-          <h1 className="text-xl font-semibold text-ink leading-tight">
+        <header className="mb-8">
+          <h1 className="text-[20px] font-semibold text-[#1d1d1f] leading-tight">
             {info.name}
           </h1>
-          <p className="text-sm text-ink-muted mt-2">{info.author}</p>
+          {info.author && (
+            <p className="text-[14px] text-[#86868b] mt-1.5">{info.author}</p>
+          )}
           {info.intro && (
-            <p className="text-sm text-ink-light mt-4 leading-relaxed line-clamp-3">
+            <p className="text-[13px] text-[#86868b] mt-3 leading-relaxed line-clamp-3">
               {info.intro}
             </p>
           )}
-          <div className="flex items-center gap-4 mt-4">
-            <button
-              onClick={handleAddToShelf}
-              className="text-xs text-accent hover:underline transition-colors"
-            >
-              加入书架
-            </button>
-            {message && <span className="text-xs text-ink-muted">{message}</span>}
-          </div>
+          <button
+            onClick={handleAddToShelf}
+            disabled={added}
+            className={`mt-4 text-[13px] font-medium transition-colors ${
+              added ? "text-[#34c759]" : "text-[#c45d35] active:text-[#a04a2a]"
+            }`}
+          >
+            {added ? "已加入书架" : "加入书架"}
+          </button>
         </header>
       )}
 
-      {/* Chapter list */}
+      {/* Chapters */}
       <section>
-        <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-4">
+        <h2 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-3">
           目录 · {chapters.length} 章
         </h2>
-        <div className="divide-y divide-ink-faint/15">
+        <div className="space-y-0">
           {chapters.map((ch) => (
             <button
               key={ch.idx}
               onClick={() => handleChapterClick(ch)}
-              className="w-full text-left py-3 text-sm text-ink hover:text-accent transition-colors truncate"
+              className="w-full text-left py-2.5 border-b border-black/[0.04] last:border-0 text-[14px] text-[#1d1d1f] truncate active:bg-black/[0.02] transition-colors"
             >
               {ch.title}
             </button>

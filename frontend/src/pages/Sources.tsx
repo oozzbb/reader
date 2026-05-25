@@ -9,74 +9,48 @@ export default function Sources() {
   const [urlInput, setUrlInput] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    loadSources();
-  }, []);
+  useEffect(() => { loadSources(); }, []);
 
   const loadSources = async () => {
     setLoading(true);
-    try {
-      const list = await api.getSources();
-      setSources(list);
-    } finally {
-      setLoading(false);
-    }
+    try { setSources(await api.getSources()); }
+    finally { setLoading(false); }
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setImporting(true);
-    setMessage("");
+    setImporting(true); setMessage("");
     try {
-      const text = await file.text();
-      const json = JSON.parse(text);
-      const arr = Array.isArray(json) ? json : [json];
-      const res = await api.importSources(arr);
-      setMessage(`已导入 ${res.count} 个书源`);
+      const json = JSON.parse(await file.text());
+      const res = await api.importSources(Array.isArray(json) ? json : [json]);
+      setMessage(`导入 ${res.count} 个书源`);
       await loadSources();
-    } catch (err) {
-      setMessage(`导入失败: ${err}`);
-    } finally {
-      setImporting(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
+    } catch (err) { setMessage(`失败: ${err}`); }
+    finally { setImporting(false); if (fileRef.current) fileRef.current.value = ""; }
   };
 
   const handleImportUrl = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!urlInput.trim()) return;
-    setImporting(true);
-    setMessage("");
+    setImporting(true); setMessage("");
     try {
       const res = await api.importSourcesFromUrl(urlInput.trim());
-      setMessage(`已导入 ${res.count} 个书源`);
-      setUrlInput("");
-      await loadSources();
-    } catch (err) {
-      setMessage(`导入失败: ${err}`);
-    } finally {
-      setImporting(false);
-    }
+      setMessage(`导入 ${res.count} 个书源`);
+      setUrlInput(""); await loadSources();
+    } catch (err) { setMessage(`失败: ${err}`); }
+    finally { setImporting(false); }
   };
 
   const handleImportYckceo = async () => {
-    setImporting(true);
-    setMessage("");
+    setImporting(true); setMessage("");
     try {
       const res = await fetch("/api/sources/import-yckceo?count=10", { method: "POST" });
       const data = await res.json();
-      if (res.ok) {
-        setMessage(`从源仓库导入 ${data.count} 个书源`);
-        await loadSources();
-      } else {
-        setMessage(`失败: ${data.detail}`);
-      }
-    } catch (err) {
-      setMessage(`失败: ${err}`);
-    } finally {
-      setImporting(false);
-    }
+      if (res.ok) { setMessage(`导入 ${data.count} 个书源`); await loadSources(); }
+      else { setMessage(`失败: ${data.detail}`); }
+    } catch (err) { setMessage(`失败: ${err}`); }
+    finally { setImporting(false); }
   };
 
   const handleToggle = async (url: string) => {
@@ -86,78 +60,65 @@ export default function Sources() {
 
   return (
     <div>
-      <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-6">
+      <h1 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-4">
         书源管理
-      </h2>
+      </h1>
 
-      {/* Import actions */}
-      <div className="space-y-3 mb-6">
-        <form onSubmit={handleImportUrl}>
+      {/* URL input */}
+      <form onSubmit={handleImportUrl} className="mb-3">
+        <div className="flex items-center h-10 px-3.5 rounded-lg bg-black/[0.04]">
           <input
             type="url"
             value={urlInput}
             onChange={(e) => setUrlInput(e.target.value)}
-            placeholder="输入书源 JSON 地址"
-            className="w-full py-2.5 bg-transparent border-b border-ink-faint/50 text-sm text-ink placeholder:text-ink-muted/60 focus:outline-none focus:border-ink-light transition-colors"
+            placeholder="书源 JSON 地址"
+            className="flex-1 bg-transparent text-[14px] text-[#1d1d1f] placeholder:text-[#86868b] outline-none"
             disabled={importing}
           />
-        </form>
-
-        <div className="flex gap-3 text-xs">
-          <button
-            onClick={handleImportYckceo}
-            disabled={importing}
-            className="text-ink-muted hover:text-accent transition-colors disabled:opacity-40"
-          >
-            {importing ? "导入中..." : "从源仓库导入"}
-          </button>
-          <span className="text-ink-faint">|</span>
-          <label className="text-ink-muted hover:text-accent transition-colors cursor-pointer">
-            上传 JSON 文件
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={handleImport}
-              disabled={importing}
-            />
-          </label>
+          {urlInput.trim() && (
+            <button type="submit" disabled={importing} className="text-[13px] font-medium text-[#c45d35] ml-2">
+              导入
+            </button>
+          )}
         </div>
+      </form>
+
+      {/* Quick actions */}
+      <div className="flex items-center gap-4 mb-5 text-[12px]">
+        <button onClick={handleImportYckceo} disabled={importing} className="text-[#86868b] active:text-[#1d1d1f] disabled:opacity-40 transition-colors">
+          从源仓库导入
+        </button>
+        <label className="text-[#86868b] active:text-[#1d1d1f] cursor-pointer transition-colors">
+          上传文件
+          <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} disabled={importing} />
+        </label>
       </div>
 
       {/* Message */}
       {message && (
-        <p className="text-xs text-accent mb-4 py-2 border-l-2 border-accent pl-3">
+        <div className="mb-4 py-2 px-3 rounded-lg bg-[#c45d35]/[0.06] text-[13px] text-[#c45d35]">
           {message}
-        </p>
+        </div>
       )}
 
-      {/* Source list */}
-      {loading ? (
-        <p className="text-sm text-ink-muted">...</p>
-      ) : sources.length === 0 ? (
-        <p className="text-sm text-ink-muted pt-4">暂无书源</p>
+      {/* List */}
+      {loading ? null : sources.length === 0 ? (
+        <p className="text-[13px] text-[#86868b] pt-6 text-center">暂无书源</p>
       ) : (
-        <div className="divide-y divide-ink-faint/20">
+        <div className="space-y-0">
           {sources.map((s) => (
-            <div
-              key={s.book_source_url}
-              className="flex items-center justify-between py-3"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-sm text-ink truncate">{s.book_source_name}</p>
-                <p className="text-xs text-ink-muted truncate mt-0.5">
-                  {s.book_source_group || "未分组"}
-                </p>
+            <div key={s.book_source_url} className="flex items-center py-3 border-b border-black/[0.04] last:border-0">
+              <div className="flex-1 min-w-0">
+                <p className="text-[14px] text-[#1d1d1f] truncate">{s.book_source_name}</p>
+                <p className="text-[12px] text-[#c7c7cc] truncate mt-0.5">{s.book_source_group || "未分组"}</p>
               </div>
               <button
                 onClick={() => handleToggle(s.book_source_url)}
-                className={`ml-4 text-xs transition-colors ${
-                  s.enabled ? "text-ink-light" : "text-ink-faint"
+                className={`text-[12px] font-medium ml-3 transition-colors ${
+                  s.enabled ? "text-[#34c759]" : "text-[#c7c7cc]"
                 }`}
               >
-                {s.enabled ? "已启用" : "已禁用"}
+                {s.enabled ? "开" : "关"}
               </button>
             </div>
           ))}

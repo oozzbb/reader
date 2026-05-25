@@ -23,6 +23,7 @@ export default function Home() {
   const [progress, setProgress] = useState<ProgressItem[]>([]);
   const [ranking, setRanking] = useState<RankItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("xuanhuan");
+  const [rankLoading, setRankLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -30,10 +31,11 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    setRankLoading(true);
     fetch(`/api/explore/ranking?category=${activeCategory}`)
       .then((r) => r.json())
-      .then(setRanking)
-      .catch(() => setRanking([]));
+      .then((data) => { setRanking(data); setRankLoading(false); })
+      .catch(() => { setRanking([]); setRankLoading(false); });
   }, [activeCategory]);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -56,59 +58,74 @@ export default function Home() {
   };
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-7">
       {/* Search */}
-      <form onSubmit={handleSearch}>
-        <input
-          type="text"
-          value={keyword}
-          onChange={(e) => setKeyword(e.target.value)}
-          placeholder="搜索书名或作者"
-          className="w-full py-3 bg-transparent border-b border-ink-faint/50 text-ink placeholder:text-ink-muted/60 focus:outline-none focus:border-ink-light text-base font-serif transition-colors"
-        />
+      <form onSubmit={handleSearch} className="relative">
+        <div className="flex items-center h-10 px-3.5 rounded-lg bg-black/[0.04]">
+          <svg className="w-4 h-4 text-[#86868b] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.2-5.2m0 0A7.5 7.5 0 105.8 5.8a7.5 7.5 0 0010 10z" />
+          </svg>
+          <input
+            type="text"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            placeholder="搜索书名或作者"
+            className="flex-1 ml-2.5 bg-transparent text-[14px] text-[#1d1d1f] placeholder:text-[#86868b] outline-none"
+          />
+        </div>
       </form>
 
       {/* Continue reading */}
       {progress.length > 0 && (
         <section>
-          <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-4">
+          <h2 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-3">
             继续阅读
           </h2>
-          <div className="space-y-0 divide-y divide-ink-faint/20">
+          <div className="space-y-2.5">
             {progress.slice(0, 3).map((item) => (
               <button
                 key={item.book_url}
                 onClick={() => handleContinue(item)}
-                className="w-full text-left py-4 group"
+                className="w-full text-left p-3.5 rounded-xl bg-white shadow-[0_1px_3px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] active:scale-[0.98] transition-transform"
               >
-                <p className="text-base text-ink group-hover:text-accent transition-colors">
-                  {item.book_name}
-                </p>
-                <p className="text-sm text-ink-muted mt-1">
-                  {item.chapter_title}
-                </p>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[15px] font-medium text-[#1d1d1f] truncate leading-snug">
+                      {item.book_name}
+                    </p>
+                    <p className="text-[13px] text-[#86868b] mt-1 truncate">
+                      {item.chapter_title}
+                    </p>
+                  </div>
+                  <div className="flex-shrink-0 w-1 h-8 rounded-full bg-[#c45d35]/20 relative overflow-hidden">
+                    <div
+                      className="absolute bottom-0 left-0 right-0 bg-[#c45d35] rounded-full"
+                      style={{ height: `${Math.min(90, (item.chapter_idx + 1) * 5)}%` }}
+                    />
+                  </div>
+                </div>
               </button>
             ))}
           </div>
         </section>
       )}
 
-      {/* Discover - Category tabs */}
+      {/* Discover */}
       <section>
-        <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-5">
+        <h2 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-3">
           发现
         </h2>
 
-        {/* Tabs */}
-        <div className="flex gap-0 overflow-x-auto scrollbar-none mb-6 -mx-1">
+        {/* Category tabs */}
+        <div className="flex gap-0 overflow-x-auto scrollbar-none -mx-1 mb-4">
           {CATEGORIES.map((cat) => (
             <button
               key={cat.key}
               onClick={() => setActiveCategory(cat.key)}
-              className={`px-3 py-2 text-sm whitespace-nowrap transition-all ${
+              className={`relative px-3 py-1.5 text-[13px] font-medium whitespace-nowrap rounded-full transition-all ${
                 activeCategory === cat.key
-                  ? "tab-active font-medium"
-                  : "tab-inactive hover:text-ink-light"
+                  ? "text-[#1d1d1f] bg-black/[0.06]"
+                  : "text-[#86868b] hover:text-[#1d1d1f]"
               }`}
             >
               {cat.label}
@@ -116,27 +133,31 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Book list */}
-        <div className="space-y-0">
+        {/* Ranking list */}
+        <div className={`transition-opacity duration-200 ${rankLoading ? "opacity-40" : "opacity-100"}`}>
           {ranking.length > 0 ? (
-            ranking.map((item, i) => (
-              <button
-                key={item.book_url}
-                onClick={() => handleRankClick(item)}
-                className="w-full text-left flex items-baseline py-3 border-b border-ink-faint/15 last:border-0 group"
-              >
-                <span className={`w-5 text-sm tabular-nums flex-shrink-0 ${
-                  i < 3 ? "text-ink font-medium" : "text-ink-faint"
-                }`}>
-                  {i + 1}
-                </span>
-                <span className="text-[15px] text-ink ml-3 group-hover:text-accent transition-colors truncate">
-                  {item.name}
-                </span>
-              </button>
-            ))
+            <div className="space-y-0">
+              {ranking.map((item, i) => (
+                <button
+                  key={item.book_url}
+                  onClick={() => handleRankClick(item)}
+                  className="w-full flex items-center py-3 border-b border-black/[0.04] last:border-0 active:bg-black/[0.02] transition-colors text-left"
+                >
+                  <span className={`w-6 text-[13px] tabular-nums font-semibold flex-shrink-0 ${
+                    i < 3 ? "text-[#c45d35]" : "text-[#c7c7cc]"
+                  }`}>
+                    {i + 1}
+                  </span>
+                  <span className="text-[14px] text-[#1d1d1f] truncate">
+                    {item.name}
+                  </span>
+                </button>
+              ))}
+            </div>
           ) : (
-            <p className="text-sm text-ink-muted py-4">加载中...</p>
+            <div className="py-8 text-center text-[13px] text-[#86868b]">
+              {rankLoading ? "" : "暂无数据"}
+            </div>
           )}
         </div>
       </section>

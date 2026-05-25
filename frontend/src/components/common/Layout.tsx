@@ -1,6 +1,6 @@
 import { Outlet, NavLink } from "react-router-dom";
 
-const navItems = [
+const tabs = [
   { to: "/", label: "首页" },
   { to: "/shelf", label: "书架" },
   { to: "/sources", label: "书源" },
@@ -8,50 +8,61 @@ const navItems = [
 
 export default function Layout() {
   return (
-    <div className="min-h-full flex flex-col bg-paper">
-      {/* Desktop: minimal top bar */}
-      <header className="hidden md:block border-b border-ink-faint/30">
-        <div className="max-w-content mx-auto px-6 py-5 flex items-baseline justify-between">
-          <h1 className="text-lg font-semibold tracking-tight text-ink">Reader</h1>
-          <nav className="flex gap-8">
-            {navItems.map((item) => (
+    <div className="min-h-full bg-[#fafafa]">
+      {/* Desktop nav */}
+      <header className="hidden md:block sticky top-0 z-30 bg-[#fafafa]/80 backdrop-blur-md border-b border-black/[0.04]">
+        <div className="max-w-app mx-auto px-6 h-12 flex items-center justify-between">
+          <span className="text-[15px] font-semibold tracking-tight text-[#1d1d1f]">
+            Reader
+          </span>
+          <nav className="flex items-center gap-6">
+            {tabs.map((tab) => (
               <NavLink
-                key={item.to}
-                to={item.to}
+                key={tab.to}
+                to={tab.to}
                 className={({ isActive }) =>
-                  `text-sm tracking-wide transition-colors ${
-                    isActive ? "text-ink" : "text-ink-muted hover:text-ink-light"
+                  `text-[13px] font-medium transition-colors ${
+                    isActive
+                      ? "text-[#1d1d1f]"
+                      : "text-[#86868b] hover:text-[#1d1d1f]"
                   }`
                 }
               >
-                {item.label}
+                {tab.label}
               </NavLink>
             ))}
           </nav>
         </div>
       </header>
 
-      {/* Content area */}
-      <main className="flex-1 pb-16 md:pb-0">
-        <div className="max-w-content mx-auto px-5 md:px-6 py-8 md:py-12">
+      {/* Content */}
+      <main className="pb-20 md:pb-6">
+        <div className="max-w-app mx-auto px-4 md:px-6 pt-5 md:pt-8">
           <Outlet />
         </div>
       </main>
 
-      {/* Mobile: bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-paper border-t border-ink-faint/30 safe-bottom">
-        <div className="flex justify-around py-3">
-          {navItems.map((item) => (
+      {/* Mobile tab bar */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-[#fafafa]/90 backdrop-blur-md border-t border-black/[0.06]">
+        <div className="flex items-center justify-around h-[52px] max-w-sm mx-auto">
+          {tabs.map((tab) => (
             <NavLink
-              key={item.to}
-              to={item.to}
+              key={tab.to}
+              to={tab.to}
               className={({ isActive }) =>
-                `text-xs tracking-widest uppercase transition-colors ${
-                  isActive ? "text-ink font-medium" : "text-ink-muted"
+                `relative flex flex-col items-center justify-center gap-0.5 px-5 py-1 ${
+                  isActive ? "text-[#1d1d1f]" : "text-[#86868b]"
                 }`
               }
             >
-              {item.label}
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <span className="absolute top-1 w-1 h-1 rounded-full bg-[#c45d35]" />
+                  )}
+                  <span className="text-[11px] font-medium mt-1">{tab.label}</span>
+                </>
+              )}
             </NavLink>
           ))}
         </div>

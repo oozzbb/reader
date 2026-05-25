@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
-
 @layer base {
   html {
     -webkit-font-smoothing: antialiased;
@@ -16,29 +14,23 @@
   }
 
   body {
-    font-family: "Noto Serif SC", Georgia, serif;
-    background-color: #fafaf8;
-    color: #1a1a1a;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background-color: #fafafa;
+    color: #1d1d1f;
     -webkit-tap-highlight-color: transparent;
   }
 
   ::selection {
-    background-color: #2c528220;
+    background-color: rgba(196, 93, 53, 0.12);
   }
 }
 
-@layer components {
-  .tab-active {
-    color: #1a1a1a;
-    border-bottom: 1.5px solid #1a1a1a;
+@layer utilities {
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
-
-  .tab-inactive {
-    color: #8a8a8a;
-    border-bottom: 1.5px solid transparent;
-  }
-
-  .divider {
-    border-bottom: 1px solid #e8e6e3;
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }

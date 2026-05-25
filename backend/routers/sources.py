@@ -1,6 +1,5 @@
 import json
 import re
-import ssl
 
 import httpx
 from bs4 import BeautifulSoup
@@ -58,12 +57,8 @@ async def import_sources_from_url(req: ImportUrlRequest):
 @router.post("/import-yckceo", response_model=ImportResponse)
 async def import_from_yckceo(count: int = Query(default=10, le=30)):
     """Fetch top N sources from yckceo.com and import them."""
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-
     try:
-        async with httpx.AsyncClient(timeout=20, verify=ctx) as client:
+        async with httpx.AsyncClient(timeout=20, verify=False) as client:
             resp = await client.get("https://www.yckceo.com/yuedu/shuyuan/index.html")
             resp.raise_for_status()
     except Exception as e:
@@ -81,7 +76,7 @@ async def import_from_yckceo(count: int = Query(default=10, le=30)):
         raise HTTPException(status_code=400, detail="No sources found on page")
 
     all_sources = []
-    async with httpx.AsyncClient(timeout=15, verify=ctx) as client:
+    async with httpx.AsyncClient(timeout=15, verify=False) as client:
         for sid in ids:
             try:
                 r = await client.get(f"https://www.yckceo.com/yuedu/shuyuan/json/id/{sid}.json")

@@ -29,38 +29,38 @@ export default function Shelf() {
     );
   };
 
-  if (loading) {
-    return <p className="text-sm text-ink-muted">...</p>;
-  }
+  if (loading) return null;
 
   if (books.length === 0) {
     return (
-      <div className="pt-12 text-center">
-        <p className="text-ink-muted text-sm">书架尚空</p>
-        <p className="text-ink-faint text-xs mt-2">搜索后可将书籍加入书架</p>
+      <div className="pt-20 text-center">
+        <p className="text-[15px] text-[#86868b]">书架为空</p>
+        <p className="text-[13px] text-[#c7c7cc] mt-1.5">搜索或从排行榜添加书籍</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-xs tracking-widest uppercase text-ink-muted mb-6">
+      <h1 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider mb-4">
         书架
-      </h2>
-      <div className="divide-y divide-ink-faint/20">
+      </h1>
+      <div className="space-y-0">
         {books.map((book) => (
           <button
             key={book.id}
             onClick={() => handleClick(book)}
-            className="w-full text-left py-4 group"
+            className="w-full flex items-center justify-between py-3.5 border-b border-black/[0.04] last:border-0 text-left active:bg-black/[0.02] transition-colors"
           >
-            <p className="text-base text-ink group-hover:text-accent transition-colors">
-              {book.name}
-            </p>
-            <p className="text-sm text-ink-muted mt-1">
-              {book.author && <span>{book.author} · </span>}
-              {book.total_chapters} 章
-            </p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[15px] text-[#1d1d1f] truncate">{book.name}</p>
+              <p className="text-[13px] text-[#86868b] mt-0.5">
+                {book.author ? `${book.author} · ` : ""}{book.total_chapters} 章
+              </p>
+            </div>
+            <svg className="w-4 h-4 text-[#c7c7cc] flex-shrink-0 ml-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
           </button>
         ))}
       </div>
