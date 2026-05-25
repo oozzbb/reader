@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.database import close_db, get_db
-from backend.routers import sources, search, content, books, progress
+from backend.routers import sources, search, content, books, progress, explore
 
 
 @asynccontextmanager
@@ -31,6 +31,7 @@ app.include_router(search.router)
 app.include_router(content.router)
 app.include_router(books.router)
 app.include_router(progress.router)
+app.include_router(explore.router)
 
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():

@@ -62,6 +62,25 @@ export default function Sources() {
     }
   };
 
+  const handleImportYckceo = async () => {
+    setImporting(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/sources/import-yckceo?count=10", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(`从源仓库导入 ${data.count} 个书源`);
+        await loadSources();
+      } else {
+        setMessage(`导入失败: ${data.detail}`);
+      }
+    } catch (err) {
+      setMessage(`导入失败: ${err}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleToggle = async (url: string) => {
     await api.toggleSource(url);
     await loadSources();
@@ -102,6 +121,15 @@ export default function Sources() {
           导入
         </button>
       </form>
+
+      {/* Quick import from yckceo */}
+      <button
+        onClick={handleImportYckceo}
+        disabled={importing}
+        className="w-full mb-4 px-3 py-2 text-sm rounded-lg border border-dashed border-gray-300 dark:border-gray-600 hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+      >
+        {importing ? "导入中..." : "从源仓库导入热门前10（yckceo.com）"}
+      </button>
 
       {message && (
         <div className="text-sm mb-3 p-2 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">

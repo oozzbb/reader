@@ -1,7 +1,10 @@
 import json
+import re
+import ssl
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from bs4 import BeautifulSoup
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from backend.services import source_manager
@@ -50,6 +53,52 @@ async def import_sources_from_url(req: ImportUrlRequest):
     sources = data if isinstance(data, list) else [data]
     count = await source_manager.import_sources(sources)
     return ImportResponse(count=count)
+
+
+@router.post("/import-yckceo", response_model=ImportResponse)
+async def import_from_yckceo(count: int = Query(default=10, le=30)):
+    """Fetch top N sources from yckceo.com and import them."""
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    try:
+        async with httpx.AsyncClient(timeout=20, verify=ctx) as client:
+            resp = await client.get("https://www.yckceo.com/yuedu/shuyuan/index.html")
+            resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch yckceo list: {e}")
+
+    soup = BeautifulSoup(resp.text, "lxml")
+    links = soup.select("a[href*='/yuedu/shuyuan/content/id/']")
+    ids = []
+    for a in links[:count]:
+        m = re.search(r"/id/(\d+)", a.get("href", ""))
+        if m:
+            ids.append(m.group(1))
+
+    if not ids:
+        raise HTTPException(status_code=400, detail="No sources found on page")
+
+    all_sources = []
+    async with httpx.AsyncClient(timeout=15, verify=ctx) as client:
+        for sid in ids:
+            try:
+                r = await client.get(f"https://www.yckceo.com/yuedu/shuyuan/json/id/{sid}.json")
+                if r.status_code == 200:
+                    data = r.json()
+                    if isinstance(data, list):
+                        all_sources.extend(data)
+                    else:
+                        all_sources.append(data)
+            except Exception:
+                continue
+
+    if not all_sources:
+        raise HTTPException(status_code=400, detail="Failed to fetch any source JSON")
+
+    imported = await source_manager.import_sources(all_sources)
+    return ImportResponse(count=imported)
 
 
 @router.get("", response_model=list[SourceItem])
