@@ -96,6 +96,48 @@ async def import_from_yckceo(count: int = Query(default=10, le=30)):
     return ImportResponse(count=imported)
 
 
+@router.post("/import-manga", response_model=ImportResponse)
+async def import_manga_sources(count: int = Query(default=10, le=30)):
+    """Fetch manga sources from yckceo legadotauri."""
+    try:
+        async with httpx.AsyncClient(timeout=20, verify=False) as client:
+            resp = await client.get("https://www.yckceo.com/legadotauri/shuyuan/index.html")
+            resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch manga list: {e}")
+
+    soup = BeautifulSoup(resp.text, "lxml")
+    links = soup.select("a[href*='/legadotauri/shuyuan/content/id/']")
+    ids = []
+    for a in links[:count]:
+        m = re.search(r"/id/(\d+)", a.get("href", ""))
+        if m:
+            ids.append(m.group(1))
+
+    if not ids:
+        raise HTTPException(status_code=400, detail="No manga sources found")
+
+    all_sources = []
+    async with httpx.AsyncClient(timeout=15, verify=False) as client:
+        for sid in ids:
+            try:
+                r = await client.get(f"https://www.yckceo.com/legadotauri/shuyuan/json/id/{sid}.json")
+                if r.status_code == 200:
+                    data = r.json()
+                    if isinstance(data, list):
+                        all_sources.extend(data)
+                    else:
+                        all_sources.append(data)
+            except Exception:
+                continue
+
+    if not all_sources:
+        raise HTTPException(status_code=400, detail="Failed to fetch any manga source")
+
+    imported = await source_manager.import_sources(all_sources)
+    return ImportResponse(count=imported)
+
+
 @router.get("", response_model=list[SourceItem])
 async def get_sources(group: str | None = None, enabled_only: bool = False):
     sources = await source_manager.list_sources(group=group, enabled_only=enabled_only)

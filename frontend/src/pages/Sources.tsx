@@ -80,9 +80,21 @@ export default function Sources() {
       </form>
 
       {/* Quick actions */}
-      <div className="flex items-center gap-4 mb-5">
+      <div className="flex items-center gap-4 mb-5 flex-wrap">
         <button onClick={handleImportYckceo} disabled={importing} className="text-[12px] text-[#86868b] hover:text-[#1d1d1f] active:text-[#c45d35] disabled:opacity-40 transition-colors">
-          从源仓库导入
+          导入小说源
+        </button>
+        <button onClick={async () => {
+          setImporting(true); setMessage("");
+          try {
+            const res = await fetch("/api/sources/import-manga?count=10", { method: "POST" });
+            const data = await res.json();
+            if (res.ok) { setMessage(`导入 ${data.count} 个漫画源`); await loadSources(); }
+            else { setMessage(`失败: ${data.detail}`); }
+          } catch (err) { setMessage(`失败: ${err}`); }
+          finally { setImporting(false); }
+        }} disabled={importing} className="text-[12px] text-[#86868b] hover:text-[#1d1d1f] active:text-[#c45d35] disabled:opacity-40 transition-colors">
+          导入漫画源
         </button>
         <label className="text-[12px] text-[#86868b] hover:text-[#1d1d1f] cursor-pointer transition-colors">
           上传文件
