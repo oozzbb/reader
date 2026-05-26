@@ -57,8 +57,14 @@ async def import_sources_from_url(req: ImportUrlRequest):
 @router.post("/import-yckceo", response_model=ImportResponse)
 async def import_from_yckceo(count: int = Query(default=10, le=30)):
     """Fetch top N sources from yckceo.com and import them."""
+    import ssl
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.set_ciphers("DEFAULT:@SECLEVEL=0")
+
     try:
-        async with httpx.AsyncClient(timeout=20, verify=False) as client:
+        async with httpx.AsyncClient(timeout=20, verify=ctx) as client:
             resp = await client.get("https://www.yckceo.com/yuedu/shuyuan/index.html")
             resp.raise_for_status()
     except Exception as e:
@@ -76,7 +82,7 @@ async def import_from_yckceo(count: int = Query(default=10, le=30)):
         raise HTTPException(status_code=400, detail="No sources found on page")
 
     all_sources = []
-    async with httpx.AsyncClient(timeout=15, verify=False) as client:
+    async with httpx.AsyncClient(timeout=15, verify=ctx) as client:
         for sid in ids:
             try:
                 r = await client.get(f"https://www.yckceo.com/yuedu/shuyuan/json/id/{sid}.json")
@@ -99,8 +105,14 @@ async def import_from_yckceo(count: int = Query(default=10, le=30)):
 @router.post("/import-manga", response_model=ImportResponse)
 async def import_manga_sources(count: int = Query(default=10, le=30)):
     """Fetch manga sources from yckceo legadotauri."""
+    import ssl
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    ctx.set_ciphers("DEFAULT:@SECLEVEL=0")
+
     try:
-        async with httpx.AsyncClient(timeout=20, verify=False) as client:
+        async with httpx.AsyncClient(timeout=20, verify=ctx) as client:
             resp = await client.get("https://www.yckceo.com/legadotauri/shuyuan/index.html")
             resp.raise_for_status()
     except Exception as e:
@@ -118,7 +130,7 @@ async def import_manga_sources(count: int = Query(default=10, le=30)):
         raise HTTPException(status_code=400, detail="No manga sources found")
 
     all_sources = []
-    async with httpx.AsyncClient(timeout=15, verify=False) as client:
+    async with httpx.AsyncClient(timeout=15, verify=ctx) as client:
         for sid in ids:
             try:
                 r = await client.get(f"https://www.yckceo.com/legadotauri/shuyuan/json/id/{sid}.json")
