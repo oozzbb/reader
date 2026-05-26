@@ -113,7 +113,7 @@ export default function Read() {
           }
         }
       },
-      { threshold: 0.1, rootMargin: "-40% 0px -55% 0px" }
+      { threshold: 0, rootMargin: "-20% 0px -70% 0px" }
     );
     chapterRefs.current.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
