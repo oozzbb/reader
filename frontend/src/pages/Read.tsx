@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { api, Chapter } from "@/api/client";
+import { api, Chapter, ChapterContent } from "@/api/client";
 import { useReaderStore } from "@/stores/readerStore";
 import ReaderSettings from "@/components/reader/ReaderSettings";
+import MangaScroll from "@/components/reader/MangaScroll";
+import MangaPage from "@/components/reader/MangaPage";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 
 interface LoadedChapter {
@@ -33,6 +35,9 @@ export default function Read() {
   const sentinelRef = useRef<HTMLDivElement>(null);
   const chapterRefs = useRef<Map<number, HTMLElement>>(new Map());
   const tocRef = useRef<HTMLDivElement>(null);
+  const [mangaImages, setMangaImages] = useState<string[]>([]);
+  const [contentType, setContentType] = useState<"novel" | "manga">("novel");
+  const [mangaMode, setMangaMode] = useState<"scroll" | "page">("scroll");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Load chapter list
@@ -60,29 +65,36 @@ export default function Read() {
       }
     };
 
+    const handleResponse = (res: ChapterContent) => {
+      if (res.type === "manga") {
+        setContentType("manga");
+        setMangaImages(res.images);
+        setLoading(false);
+      } else {
+        setContentType("novel");
+        setMangaImages([]);
+        setLoadedChapters([{ title, content: res.content, idx: startIdx }]);
+        setCurrentViewIdx(startIdx);
+        setLoading(false);
+        setTimeout(restoreScroll, 100);
+        idbSet(cacheKey, res.content).catch(() => {});
+        prefetchChapters(startIdx);
+      }
+    };
+
     idbGet(cacheKey).then((cached: string | undefined) => {
       if (cached) {
+        setContentType("novel");
         setLoadedChapters([{ title, content: cached, idx: startIdx }]);
         setCurrentViewIdx(startIdx);
         setLoading(false);
         setTimeout(restoreScroll, 100);
       }
       api.getChapterContent(chapterUrl, sourceUrl).then((res) => {
-        setLoadedChapters([{ title, content: res.content, idx: startIdx }]);
-        setCurrentViewIdx(startIdx);
-        setLoading(false);
-        if (!cached) setTimeout(restoreScroll, 100);
-        idbSet(cacheKey, res.content).catch(() => {});
-        prefetchChapters(startIdx);
+        handleResponse(res);
       }).catch(() => { if (!cached) setLoading(false); });
     }).catch(() => {
-      api.getChapterContent(chapterUrl, sourceUrl).then((res) => {
-        setLoadedChapters([{ title, content: res.content, idx: startIdx }]);
-        setCurrentViewIdx(startIdx);
-        setLoading(false);
-        setTimeout(restoreScroll, 100);
-        prefetchChapters(startIdx);
-      }).catch(() => setLoading(false));
+      api.getChapterContent(chapterUrl, sourceUrl).then(handleResponse).catch(() => setLoading(false));
     });
   }, [chapterUrl, sourceUrl, title, startIdx]);
 
@@ -172,7 +184,7 @@ export default function Read() {
         if (cached) continue;
         try {
           const res = await api.getChapterContent(ch.url, sourceUrl);
-          await idbSet(key, res.content);
+          if (res.type === "novel") await idbSet(key, res.content);
         } catch { break; }
       }
     })();
@@ -196,22 +208,28 @@ export default function Read() {
         setLoading(false);
       }
       api.getChapterContent(nextChapter.url, sourceUrl).then((res) => {
-        if (!cached) {
+        if (res.type === "novel") {
+          if (!cached) {
+            setLoadedChapters((prev) => [
+              ...prev,
+              { title: nextChapter.title, content: res.content, idx: nextChapter.idx },
+            ]);
+          }
+          setLoading(false);
+          idbSet(cacheKey, res.content).catch(() => {});
+          prefetchChapters(nextChapter.idx);
+        } else {
+          setLoading(false);
+        }
+      }).catch(() => { if (!cached) setLoading(false); });
+    }).catch(() => {
+      api.getChapterContent(nextChapter.url, sourceUrl).then((res) => {
+        if (res.type === "novel") {
           setLoadedChapters((prev) => [
             ...prev,
             { title: nextChapter.title, content: res.content, idx: nextChapter.idx },
           ]);
         }
-        setLoading(false);
-        idbSet(cacheKey, res.content).catch(() => {});
-        prefetchChapters(nextChapter.idx);
-      }).catch(() => { if (!cached) setLoading(false); });
-    }).catch(() => {
-      api.getChapterContent(nextChapter.url, sourceUrl).then((res) => {
-        setLoadedChapters((prev) => [
-          ...prev,
-          { title: nextChapter.title, content: res.content, idx: nextChapter.idx },
-        ]);
         setLoading(false);
       }).catch(() => setLoading(false));
     });
@@ -289,6 +307,14 @@ export default function Read() {
           <span className="text-[13px] truncate flex-1">
             {chapters.find((ch) => ch.idx === currentViewIdx)?.title || title}
           </span>
+          {contentType === "manga" && (
+            <button
+              onClick={() => setMangaMode((m) => m === "scroll" ? "page" : "scroll")}
+              className="text-[13px] ml-2"
+            >
+              {mangaMode === "scroll" ? "页模式" : "条模式"}
+            </button>
+          )}
           <button onClick={() => setShowSettings(true)} className="text-[13px] ml-2">
             设置
           </button>
@@ -296,36 +322,46 @@ export default function Read() {
       )}
 
       {/* Content */}
-      <div
-        className={`max-w-reader mx-auto pt-6 pb-24 ${paddingMap[settings.padding]}`}
-        style={{ fontSize: `${settings.fontSize}px`, lineHeight: settings.lineHeight }}
-      >
-        {loadedChapters.map((ch) => (
-          <section
-            key={ch.idx}
-            ref={(el) => { if (el) chapterRefs.current.set(ch.idx, el); }}
-            data-chapter-idx={ch.idx}
-            className="mb-10"
-          >
-            <h2 className="text-center font-medium mb-8 text-[13px] opacity-40 tracking-wide">
-              {ch.title}
-            </h2>
-            <div className="whitespace-pre-wrap leading-[1.9]">{ch.content}</div>
-          </section>
-        ))}
+      {contentType === "manga" ? (
+        <div className="pb-16">
+          {mangaMode === "scroll" ? (
+            <MangaScroll images={mangaImages} sourceUrl={sourceUrl} />
+          ) : (
+            <MangaPage images={mangaImages} sourceUrl={sourceUrl} />
+          )}
+        </div>
+      ) : (
+        <div
+          className={`max-w-reader mx-auto pt-6 pb-24 ${paddingMap[settings.padding]}`}
+          style={{ fontSize: `${settings.fontSize}px`, lineHeight: settings.lineHeight }}
+        >
+          {loadedChapters.map((ch) => (
+            <section
+              key={ch.idx}
+              ref={(el) => { if (el) chapterRefs.current.set(ch.idx, el); }}
+              data-chapter-idx={ch.idx}
+              className="mb-10"
+            >
+              <h2 className="text-center font-medium mb-8 text-[13px] opacity-40 tracking-wide">
+                {ch.title}
+              </h2>
+              <div className="whitespace-pre-wrap leading-[1.9]">{ch.content}</div>
+            </section>
+          ))}
 
-        {loading && (
-          <p className="text-center opacity-40 py-6 text-[13px]">加载中...</p>
-        )}
+          {loading && (
+            <p className="text-center opacity-40 py-6 text-[13px]">加载中...</p>
+          )}
 
-        {hasNext && !loading && (
-          <div ref={sentinelRef} className="h-20" />
-        )}
+          {hasNext && !loading && (
+            <div ref={sentinelRef} className="h-20" />
+          )}
 
-        {!hasNext && loadedChapters.length > 0 && (
-          <p className="text-center opacity-30 py-6 text-[13px]">— 已是最新章节 —</p>
-        )}
-      </div>
+          {!hasNext && loadedChapters.length > 0 && (
+            <p className="text-center opacity-30 py-6 text-[13px]">— 已是最新章节 —</p>
+          )}
+        </div>
+      )}
 
       {/* Bottom nav */}
       <div

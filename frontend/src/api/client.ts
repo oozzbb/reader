@@ -61,7 +61,7 @@ export const api = {
     ),
 
   getChapterContent: (url: string, sourceUrl: string) =>
-    request<{ content: string }>(
+    request<ChapterContent>(
       `/content/chapter?url=${encodeURIComponent(url)}&source_url=${encodeURIComponent(sourceUrl)}`
     ),
 
@@ -119,3 +119,7 @@ export interface ProgressItem {
   scroll_percent: number;
   updated_at: string;
 }
+
+export type ChapterContent =
+  | { type: "novel"; content: string }
+  | { type: "manga"; images: string[] };

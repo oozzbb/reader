@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.database import close_db, get_db
-from backend.routers import sources, search, content, books, progress, explore
+from backend.routers import sources, search, content, books, progress, explore, proxy
 
 
 @asynccontextmanager
@@ -32,6 +32,7 @@ app.include_router(content.router)
 app.include_router(books.router)
 app.include_router(progress.router)
 app.include_router(explore.router)
+app.include_router(proxy.router)
 
 @app.get("/api/version")
 async def get_version():
