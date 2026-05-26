@@ -13,6 +13,7 @@ class ProgressData(BaseModel):
     chapter_idx: int = 0
     chapter_title: str = ""
     chapter_url: str = ""
+    scroll_percent: float = 0.0
 
 
 class ProgressResponse(ProgressData):
@@ -24,10 +25,10 @@ async def save_progress(data: ProgressData):
     db = await get_db()
     await db.execute(
         """INSERT OR REPLACE INTO reading_progress
-        (book_url, source_url, book_name, chapter_idx, chapter_title, chapter_url, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, datetime('now'))""",
+        (book_url, source_url, book_name, chapter_idx, chapter_title, chapter_url, scroll_percent, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
         (data.book_url, data.source_url, data.book_name,
-         data.chapter_idx, data.chapter_title, data.chapter_url),
+         data.chapter_idx, data.chapter_title, data.chapter_url, data.scroll_percent),
     )
     await db.commit()
     return {"message": "saved"}
@@ -48,6 +49,7 @@ async def get_all_progress():
             chapter_idx=row["chapter_idx"],
             chapter_title=row["chapter_title"],
             chapter_url=row["chapter_url"],
+            scroll_percent=row["scroll_percent"] if "scroll_percent" in row.keys() else 0.0,
             updated_at=row["updated_at"] or "",
         )
         for row in rows
@@ -70,5 +72,6 @@ async def get_progress(book_url: str):
         chapter_idx=row["chapter_idx"],
         chapter_title=row["chapter_title"],
         chapter_url=row["chapter_url"],
+        scroll_percent=row["scroll_percent"] if "scroll_percent" in row.keys() else 0.0,
         updated_at=row["updated_at"] or "",
     )

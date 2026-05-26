@@ -96,6 +96,7 @@ export const api = {
     chapter_idx: number;
     chapter_title: string;
     chapter_url: string;
+    scroll_percent: number;
   }) =>
     request<void>("/progress", {
       method: "POST",
@@ -115,5 +116,6 @@ export interface ProgressItem {
   chapter_idx: number;
   chapter_title: string;
   chapter_url: string;
+  scroll_percent: number;
   updated_at: string;
 }

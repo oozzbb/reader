@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS reading_progress (
     chapter_idx INTEGER DEFAULT 0,
     chapter_title TEXT DEFAULT '',
     chapter_url TEXT DEFAULT '',
+    scroll_percent REAL DEFAULT 0,
     updated_at TEXT DEFAULT (datetime('now'))
 );
 

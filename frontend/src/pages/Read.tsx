@@ -19,6 +19,7 @@ export default function Read() {
   const bookUrl = params.get("book_url") || "";
   const bookName = params.get("book_name") || "";
   const startIdx = parseInt(params.get("idx") || "0");
+  const savedScrollPercent = parseFloat(params.get("scroll") || "0");
   const navigate = useNavigate();
 
   const { settings } = useReaderStore();
@@ -47,26 +48,40 @@ export default function Read() {
     setLoadedChapters([]);
 
     const cacheKey = `ch:${chapterUrl}`;
+
+    const restoreScroll = () => {
+      if (savedScrollPercent > 0) {
+        requestAnimationFrame(() => {
+          const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+          window.scrollTo(0, maxScroll * savedScrollPercent);
+        });
+      } else {
+        window.scrollTo(0, 0);
+      }
+    };
+
     idbGet(cacheKey).then((cached: string | undefined) => {
       if (cached) {
         setLoadedChapters([{ title, content: cached, idx: startIdx }]);
         setCurrentViewIdx(startIdx);
         setLoading(false);
-        window.scrollTo(0, 0);
+        setTimeout(restoreScroll, 100);
       }
       api.getChapterContent(chapterUrl, sourceUrl).then((res) => {
         setLoadedChapters([{ title, content: res.content, idx: startIdx }]);
         setCurrentViewIdx(startIdx);
         setLoading(false);
-        if (!cached) window.scrollTo(0, 0);
+        if (!cached) setTimeout(restoreScroll, 100);
         idbSet(cacheKey, res.content).catch(() => {});
+        prefetchChapters(startIdx);
       }).catch(() => { if (!cached) setLoading(false); });
     }).catch(() => {
       api.getChapterContent(chapterUrl, sourceUrl).then((res) => {
         setLoadedChapters([{ title, content: res.content, idx: startIdx }]);
         setCurrentViewIdx(startIdx);
         setLoading(false);
-        window.scrollTo(0, 0);
+        setTimeout(restoreScroll, 100);
+        prefetchChapters(startIdx);
       }).catch(() => setLoading(false));
     });
   }, [chapterUrl, sourceUrl, title, startIdx]);
@@ -104,14 +119,17 @@ export default function Read() {
     return () => observer.disconnect();
   });
 
-  // Auto-save progress (debounced 1.5s)
+  // Auto-save progress with scroll position (debounced 2s on scroll, immediate on chapter change)
+  const scrollSaveRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
     if (!bookUrl || !sourceUrl || chapters.length === 0) return;
-    const ch = chapters.find((c) => c.idx === currentViewIdx);
-    if (!ch) return;
 
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
+    const saveNow = () => {
+      const ch = chapters.find((c) => c.idx === currentViewIdx);
+      if (!ch) return;
+      const scrollPercent = document.documentElement.scrollHeight > window.innerHeight
+        ? window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)
+        : 0;
       api.saveProgress({
         book_url: bookUrl,
         source_url: sourceUrl,
@@ -119,11 +137,46 @@ export default function Read() {
         chapter_idx: currentViewIdx,
         chapter_title: ch.title,
         chapter_url: ch.url,
+        scroll_percent: Math.round(scrollPercent * 1000) / 1000,
       }).catch(() => {});
-    }, 1500);
+    };
 
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+    // Save on chapter change (debounced)
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(saveNow, 1500);
+
+    // Save on scroll stop
+    const handleScroll = () => {
+      if (scrollSaveRef.current) clearTimeout(scrollSaveRef.current);
+      scrollSaveRef.current = setTimeout(saveNow, 2000);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (scrollSaveRef.current) clearTimeout(scrollSaveRef.current);
+      window.removeEventListener("scroll", handleScroll);
+    };
   }, [currentViewIdx, bookUrl, sourceUrl, chapters, bookName, title]);
+
+  // Prefetch next 3 chapters in background
+  const prefetchChapters = useCallback((fromIdx: number) => {
+    if (chapters.length === 0) return;
+    const prefetchCount = 3;
+    (async () => {
+      for (let i = 1; i <= prefetchCount; i++) {
+        const ch = chapters.find((c) => c.idx === fromIdx + i);
+        if (!ch?.url) continue;
+        const key = `ch:${ch.url}`;
+        const cached = await idbGet(key).catch(() => null);
+        if (cached) continue;
+        try {
+          const res = await api.getChapterContent(ch.url, sourceUrl);
+          await idbSet(key, res.content);
+        } catch { break; }
+      }
+    })();
+  }, [chapters, sourceUrl]);
 
   const loadNextChapter = useCallback(() => {
     if (loading || loadedChapters.length === 0 || chapters.length === 0) return;
@@ -151,6 +204,7 @@ export default function Read() {
         }
         setLoading(false);
         idbSet(cacheKey, res.content).catch(() => {});
+        prefetchChapters(nextChapter.idx);
       }).catch(() => { if (!cached) setLoading(false); });
     }).catch(() => {
       api.getChapterContent(nextChapter.url, sourceUrl).then((res) => {

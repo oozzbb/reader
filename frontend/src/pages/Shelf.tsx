@@ -25,7 +25,7 @@ export default function Shelf() {
       const progress = await api.getProgress(book.book_url);
       if (progress && progress.chapter_url) {
         navigate(
-          `/read?url=${encodeURIComponent(progress.chapter_url)}&source_url=${encodeURIComponent(progress.source_url)}&title=${encodeURIComponent(progress.chapter_title)}&idx=${progress.chapter_idx}&book_url=${encodeURIComponent(book.book_url)}&book_name=${encodeURIComponent(book.name)}`
+          `/read?url=${encodeURIComponent(progress.chapter_url)}&source_url=${encodeURIComponent(progress.source_url)}&title=${encodeURIComponent(progress.chapter_title)}&idx=${progress.chapter_idx}&book_url=${encodeURIComponent(book.book_url)}&book_name=${encodeURIComponent(book.name)}&scroll=${progress.scroll_percent || 0}`
         );
         return;
       }

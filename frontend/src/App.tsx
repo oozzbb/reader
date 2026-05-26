@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import Layout from "./components/common/Layout";
 import Home from "./pages/Home";
@@ -7,7 +8,25 @@ import Read from "./pages/Read";
 import Sources from "./pages/Sources";
 import Shelf from "./pages/Shelf";
 
+function useVersionCheck() {
+  useEffect(() => {
+    fetch("/api/version")
+      .then((r) => r.json())
+      .then((data) => {
+        const stored = localStorage.getItem("app_version");
+        if (stored && stored !== data.version) {
+          localStorage.setItem("app_version", data.version);
+          window.location.reload();
+        } else {
+          localStorage.setItem("app_version", data.version);
+        }
+      })
+      .catch(() => {});
+  }, []);
+}
+
 export default function App() {
+  useVersionCheck();
   return (
     <Routes>
       <Route element={<Layout />}>

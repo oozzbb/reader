@@ -33,6 +33,13 @@ app.include_router(books.router)
 app.include_router(progress.router)
 app.include_router(explore.router)
 
+@app.get("/api/version")
+async def get_version():
+    version_file = Path(__file__).parent.parent / "VERSION"
+    if version_file.exists():
+        return {"version": version_file.read_text().strip()}
+    return {"version": "dev"}
+
 static_dir = Path(__file__).parent.parent / "static"
 if static_dir.exists():
     app.mount("/assets", StaticFiles(directory=str(static_dir / "assets")), name="assets")
