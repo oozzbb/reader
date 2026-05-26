@@ -39,8 +39,8 @@ async def chapter_content(
 
     images = _extract_images(content)
     if images:
-        return {"type": "manga", "images": images}
-    return {"type": "novel", "content": content}
+        return {"type": "manga", "images": images, "content": ""}
+    return {"type": "novel", "content": content, "images": []}
 
 
 def _extract_images(content: str) -> list[str]:
