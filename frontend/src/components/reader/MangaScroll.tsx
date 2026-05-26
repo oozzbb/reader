@@ -10,7 +10,7 @@ export default function MangaScroll({ images, sourceUrl }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const proxyUrl = (url: string) =>
-    `/api/proxy/image?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(sourceUrl)}`;
+    `https://tv.rio.edu.kg/img-proxy?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(sourceUrl)}`;
 
   return (
     <div ref={containerRef} className="w-full max-w-reader mx-auto">

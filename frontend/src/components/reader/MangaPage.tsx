@@ -9,7 +9,7 @@ export default function MangaPage({ images, sourceUrl }: Props) {
   const [currentPage, setCurrentPage] = useState(0);
 
   const proxyUrl = (url: string) =>
-    `/api/proxy/image?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(sourceUrl)}`;
+    `https://tv.rio.edu.kg/img-proxy?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(sourceUrl)}`;
 
   const goNext = useCallback(() => {
     if (currentPage < images.length - 1) setCurrentPage((p) => p + 1);
