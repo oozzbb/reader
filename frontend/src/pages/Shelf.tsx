@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { api } from "@/api/client";
 
 interface BookItem {
   id: number;
@@ -19,7 +20,16 @@ export default function Shelf() {
     fetch("/api/books").then((r) => r.json()).then(setBooks).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
-  const handleClick = (book: BookItem) => {
+  const handleClick = async (book: BookItem) => {
+    try {
+      const progress = await api.getProgress(book.book_url);
+      if (progress && progress.chapter_url) {
+        navigate(
+          `/read?url=${encodeURIComponent(progress.chapter_url)}&source_url=${encodeURIComponent(progress.source_url)}&title=${encodeURIComponent(progress.chapter_title)}&idx=${progress.chapter_idx}&book_url=${encodeURIComponent(book.book_url)}&book_name=${encodeURIComponent(book.name)}`
+        );
+        return;
+      }
+    } catch {}
     navigate(`/book?book_url=${encodeURIComponent(book.book_url)}&source_url=${encodeURIComponent(book.source_url)}`);
   };
 

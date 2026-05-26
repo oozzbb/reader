@@ -103,6 +103,9 @@ export const api = {
     }),
 
   getProgressList: () => request<ProgressItem[]>("/progress"),
+
+  getProgress: (bookUrl: string) =>
+    request<ProgressItem | null>(`/progress/${encodeURIComponent(bookUrl)}`),
 };
 
 export interface ProgressItem {

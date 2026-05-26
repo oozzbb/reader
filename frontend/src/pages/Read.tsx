@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { api, Chapter } from "@/api/client";
 import { useReaderStore } from "@/stores/readerStore";
 import ReaderSettings from "@/components/reader/ReaderSettings";
+import { get as idbGet, set as idbSet } from "idb-keyval";
 
 interface LoadedChapter {
   title: string;
@@ -30,6 +31,8 @@ export default function Read() {
   const [currentViewIdx, setCurrentViewIdx] = useState(startIdx);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const chapterRefs = useRef<Map<number, HTMLElement>>(new Map());
+  const tocRef = useRef<HTMLDivElement>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Load chapter list
   useEffect(() => {
@@ -37,16 +40,34 @@ export default function Read() {
     api.getChapters(bookUrl, sourceUrl).then(setChapters).catch(() => {});
   }, [bookUrl, sourceUrl]);
 
-  // Load initial chapter
+  // Load initial chapter with IndexedDB cache
   useEffect(() => {
     if (!chapterUrl || !sourceUrl) return;
     setLoading(true);
     setLoadedChapters([]);
-    api.getChapterContent(chapterUrl, sourceUrl).then((res) => {
-      setLoadedChapters([{ title, content: res.content, idx: startIdx }]);
-      setCurrentViewIdx(startIdx);
-      setLoading(false);
-      window.scrollTo(0, 0);
+
+    const cacheKey = `ch:${chapterUrl}`;
+    idbGet(cacheKey).then((cached: string | undefined) => {
+      if (cached) {
+        setLoadedChapters([{ title, content: cached, idx: startIdx }]);
+        setCurrentViewIdx(startIdx);
+        setLoading(false);
+        window.scrollTo(0, 0);
+      }
+      api.getChapterContent(chapterUrl, sourceUrl).then((res) => {
+        setLoadedChapters([{ title, content: res.content, idx: startIdx }]);
+        setCurrentViewIdx(startIdx);
+        setLoading(false);
+        if (!cached) window.scrollTo(0, 0);
+        idbSet(cacheKey, res.content).catch(() => {});
+      }).catch(() => { if (!cached) setLoading(false); });
+    }).catch(() => {
+      api.getChapterContent(chapterUrl, sourceUrl).then((res) => {
+        setLoadedChapters([{ title, content: res.content, idx: startIdx }]);
+        setCurrentViewIdx(startIdx);
+        setLoading(false);
+        window.scrollTo(0, 0);
+      }).catch(() => setLoading(false));
     });
   }, [chapterUrl, sourceUrl, title, startIdx]);
 
@@ -64,38 +85,44 @@ export default function Read() {
     return () => observer.disconnect();
   });
 
-  // Track which chapter is in view
+  // Track which chapter is in view — rootMargin targets screen center
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
           if (entry.isIntersecting) {
             const idx = Number(entry.target.getAttribute("data-chapter-idx"));
-            if (!isNaN(idx) && idx !== currentViewIdx) {
+            if (!isNaN(idx)) {
               setCurrentViewIdx(idx);
             }
           }
         }
       },
-      { threshold: 0.3 }
+      { threshold: 0.1, rootMargin: "-40% 0px -55% 0px" }
     );
     chapterRefs.current.forEach((el) => observer.observe(el));
     return () => observer.disconnect();
   });
 
-  // Auto-save reading progress when chapter changes
+  // Auto-save progress (debounced 1.5s)
   useEffect(() => {
     if (!bookUrl || !sourceUrl || chapters.length === 0) return;
     const ch = chapters.find((c) => c.idx === currentViewIdx);
     if (!ch) return;
-    api.saveProgress({
-      book_url: bookUrl,
-      source_url: sourceUrl,
-      book_name: bookName || title,
-      chapter_idx: currentViewIdx,
-      chapter_title: ch.title,
-      chapter_url: ch.url,
-    }).catch(() => {});
+
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      api.saveProgress({
+        book_url: bookUrl,
+        source_url: sourceUrl,
+        book_name: bookName || title,
+        chapter_idx: currentViewIdx,
+        chapter_title: ch.title,
+        chapter_url: ch.url,
+      }).catch(() => {});
+    }, 1500);
+
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
   }, [currentViewIdx, bookUrl, sourceUrl, chapters, bookName, title]);
 
   const loadNextChapter = useCallback(() => {
@@ -105,13 +132,35 @@ export default function Read() {
     if (!nextChapter || !nextChapter.url) return;
 
     setLoading(true);
-    api.getChapterContent(nextChapter.url, sourceUrl).then((res) => {
-      setLoadedChapters((prev) => [
-        ...prev,
-        { title: nextChapter.title, content: res.content, idx: nextChapter.idx },
-      ]);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    const cacheKey = `ch:${nextChapter.url}`;
+
+    idbGet(cacheKey).then((cached: string | undefined) => {
+      if (cached) {
+        setLoadedChapters((prev) => [
+          ...prev,
+          { title: nextChapter.title, content: cached, idx: nextChapter.idx },
+        ]);
+        setLoading(false);
+      }
+      api.getChapterContent(nextChapter.url, sourceUrl).then((res) => {
+        if (!cached) {
+          setLoadedChapters((prev) => [
+            ...prev,
+            { title: nextChapter.title, content: res.content, idx: nextChapter.idx },
+          ]);
+        }
+        setLoading(false);
+        idbSet(cacheKey, res.content).catch(() => {});
+      }).catch(() => { if (!cached) setLoading(false); });
+    }).catch(() => {
+      api.getChapterContent(nextChapter.url, sourceUrl).then((res) => {
+        setLoadedChapters((prev) => [
+          ...prev,
+          { title: nextChapter.title, content: res.content, idx: nextChapter.idx },
+        ]);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    });
   }, [loading, loadedChapters, chapters, sourceUrl]);
 
   const toggleToolbar = useCallback(() => {
@@ -145,10 +194,26 @@ export default function Read() {
   const lastIdx = loadedChapters.length > 0 ? loadedChapters[loadedChapters.length - 1].idx : startIdx;
   const hasNext = chapters.some((ch) => ch.idx === lastIdx + 1);
 
+  // Scroll TOC to current chapter
+  useEffect(() => {
+    if (showToc && tocRef.current) {
+      requestAnimationFrame(() => {
+        const active = tocRef.current?.querySelector("[data-active='true']");
+        if (active) active.scrollIntoView({ block: "center", behavior: "instant" });
+      });
+    }
+  }, [showToc]);
+
   const themeStyles = {
-    light: "bg-paper text-ink",
-    dark: "bg-paper-dark text-gray-200",
-    sepia: "bg-[#f5f0e8] text-[#3d3425]",
+    light: "bg-white text-[#1d1d1f]",
+    dark: "bg-[#1c1c1e] text-[#e5e5e7]",
+    sepia: "bg-[#f8f3eb] text-[#3d3425]",
+  };
+
+  const bottomBarTheme = {
+    light: "bg-white/95 border-black/[0.06] text-[#1d1d1f]",
+    dark: "bg-[#1c1c1e]/95 border-white/[0.08] text-[#e5e5e7]",
+    sepia: "bg-[#f8f3eb]/95 border-[#3d3425]/10 text-[#3d3425]",
   };
 
   const paddingMap = { sm: "px-4", md: "px-6", lg: "px-10" };
@@ -162,80 +227,74 @@ export default function Read() {
       {showToolbar && (
         <div
           className="fixed top-0 inset-x-0 z-50 flex items-center px-4 py-3 bg-black/80 text-white backdrop-blur-sm"
-          onClick={(e) => e.stopPropagation()}
+          onClickCapture={(e) => e.stopPropagation()}
         >
-          <button onClick={() => navigate(-1)} className="text-sm mr-4">
+          <button onClick={() => navigate(-1)} className="text-[13px] mr-4">
             ← 返回
           </button>
-          <span className="text-sm truncate flex-1">
+          <span className="text-[13px] truncate flex-1">
             {chapters.find((ch) => ch.idx === currentViewIdx)?.title || title}
           </span>
-          <button onClick={() => setShowSettings(true)} className="text-sm ml-2">
+          <button onClick={() => setShowSettings(true)} className="text-[13px] ml-2">
             设置
           </button>
         </div>
       )}
 
-      {/* Content - continuous scroll */}
+      {/* Content */}
       <div
         className={`max-w-reader mx-auto pt-6 pb-24 ${paddingMap[settings.padding]}`}
-        style={{
-          fontSize: `${settings.fontSize}px`,
-          lineHeight: settings.lineHeight,
-        }}
+        style={{ fontSize: `${settings.fontSize}px`, lineHeight: settings.lineHeight }}
       >
         {loadedChapters.map((ch) => (
           <section
             key={ch.idx}
             ref={(el) => { if (el) chapterRefs.current.set(ch.idx, el); }}
             data-chapter-idx={ch.idx}
-            className="mb-8"
+            className="mb-10"
           >
-            <h2 className="text-center font-medium mb-8 text-sm text-ink-muted tracking-wide">
+            <h2 className="text-center font-medium mb-8 text-[13px] opacity-40 tracking-wide">
               {ch.title}
             </h2>
-            <div className="whitespace-pre-wrap leading-[1.9] font-serif text-ink/90">{ch.content}</div>
+            <div className="whitespace-pre-wrap leading-[1.9]">{ch.content}</div>
           </section>
         ))}
 
-        {/* Loading indicator */}
         {loading && (
-          <p className="text-center text-gray-400 py-6">加载中...</p>
+          <p className="text-center opacity-40 py-6 text-[13px]">加载中...</p>
         )}
 
-        {/* Sentinel for auto-load */}
         {hasNext && !loading && (
           <div ref={sentinelRef} className="h-20" />
         )}
 
-        {/* End marker */}
         {!hasNext && loadedChapters.length > 0 && (
-          <p className="text-center text-gray-400 py-6 text-sm">— 已是最新章节 —</p>
+          <p className="text-center opacity-30 py-6 text-[13px]">— 已是最新章节 —</p>
         )}
       </div>
 
       {/* Bottom nav */}
       <div
-        className="fixed bottom-0 inset-x-0 z-40 flex items-center justify-between px-6 py-3 bg-paper/95 backdrop-blur-sm border-t border-ink-faint/20 text-ink"
-        onClick={(e) => e.stopPropagation()}
+        className={`fixed bottom-0 inset-x-0 z-40 flex items-center justify-between px-6 py-3 backdrop-blur-sm border-t ${bottomBarTheme[settings.theme]}`}
+        onClickCapture={(e) => e.stopPropagation()}
       >
         <button
           onClick={goPrev}
           disabled={!hasPrev}
-          className="text-sm px-3 py-1.5 rounded disabled:opacity-30"
+          className="text-[13px] px-3 py-2 rounded-lg disabled:opacity-20 active:bg-black/[0.05]"
         >
           上一章
         </button>
         <button
           onClick={() => { setShowToc(true); setShowToolbar(false); }}
-          className="text-sm px-3 py-1.5 rounded"
+          className="text-[13px] px-3 py-2 rounded-lg active:bg-black/[0.05]"
         >
           目录 ({chapters.length})
         </button>
         <button
           onClick={loadNextChapter}
           disabled={!hasNext || loading}
-          className="text-sm px-3 py-1.5 rounded disabled:opacity-30"
+          className="text-[13px] px-3 py-2 rounded-lg disabled:opacity-20 active:bg-black/[0.05]"
         >
           下一章
         </button>
@@ -248,23 +307,25 @@ export default function Read() {
           onClick={() => setShowToc(false)}
         >
           <div
-            className="w-72 max-w-[80vw] h-full bg-paper shadow-2xl overflow-y-auto"
+            ref={tocRef}
+            className="w-72 max-w-[80vw] h-full bg-white shadow-2xl overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="sticky top-0 px-5 py-4 border-b border-ink-faint/20 bg-paper">
-              <h3 className="text-xs tracking-widest uppercase text-ink-muted">
+            <div className="sticky top-0 px-5 py-4 border-b border-black/[0.06] bg-white z-10">
+              <h3 className="text-[12px] font-semibold text-[#86868b] uppercase tracking-wider">
                 目录 · {chapters.length} 章
               </h3>
             </div>
-            <div className="py-2">
+            <div className="py-1">
               {chapters.map((ch) => (
                 <button
                   key={ch.idx}
+                  data-active={ch.idx === currentViewIdx ? "true" : undefined}
                   onClick={() => goToChapter(ch)}
-                  className={`block w-full text-left px-5 py-2.5 text-sm truncate transition-colors ${
+                  className={`block w-full text-left px-5 py-2.5 text-[13px] truncate transition-colors ${
                     ch.idx === currentViewIdx
-                      ? "text-accent font-medium"
-                      : "text-ink-light hover:text-ink"
+                      ? "text-[#c45d35] font-medium bg-[#c45d35]/[0.04]"
+                      : "text-[#1d1d1f] hover:bg-black/[0.03]"
                   }`}
                 >
                   {ch.title}
@@ -276,10 +337,7 @@ export default function Read() {
         </div>
       )}
 
-      {/* Settings panel */}
-      {showSettings && (
-        <ReaderSettings onClose={() => setShowSettings(false)} />
-      )}
+      {showSettings && <ReaderSettings onClose={() => setShowSettings(false)} />}
     </div>
   );
 }
