@@ -227,7 +227,7 @@ export default function Read() {
       {showToolbar && (
         <div
           className="fixed top-0 inset-x-0 z-50 flex items-center px-4 py-3 bg-black/80 text-white backdrop-blur-sm"
-          onClickCapture={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
         >
           <button onClick={() => navigate(-1)} className="text-[13px] mr-4">
             ← 返回
@@ -276,7 +276,7 @@ export default function Read() {
       {/* Bottom nav */}
       <div
         className={`fixed bottom-0 inset-x-0 z-40 flex items-center justify-between px-6 py-3 backdrop-blur-sm border-t ${bottomBarTheme[settings.theme]}`}
-        onClickCapture={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={goPrev}
