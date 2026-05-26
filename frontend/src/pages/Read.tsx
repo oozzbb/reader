@@ -346,8 +346,11 @@ export default function Read() {
           目录 ({chapters.length})
         </button>
         <button
-          onClick={loadNextChapter}
-          disabled={!hasNext || loading}
+          onClick={() => {
+            const next = chapters.find((ch) => ch.idx === currentViewIdx + 1);
+            if (next) goToChapter(next);
+          }}
+          disabled={!chapters.some((ch) => ch.idx === currentViewIdx + 1)}
           className="text-[13px] px-3 py-2 rounded-lg disabled:opacity-20 active:bg-black/[0.05]"
         >
           下一章
