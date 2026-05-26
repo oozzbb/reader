@@ -56,16 +56,11 @@ async def import_sources_from_url(req: ImportUrlRequest):
 
 @router.post("/import-yckceo", response_model=ImportResponse)
 async def import_from_yckceo(count: int = Query(default=10, le=30)):
-    """Fetch top N sources from yckceo.com and import them."""
-    import ssl
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    ctx.set_ciphers("DEFAULT:@SECLEVEL=0")
-
+    """Fetch top N sources from yckceo.com via CF proxy."""
     try:
-        async with httpx.AsyncClient(timeout=20, verify=ctx) as client:
-            resp = await client.get("https://www.yckceo.com/yuedu/shuyuan/index.html")
+        async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
+            proxy_url = f"{CF_PROXY}?url=https://www.yckceo.com/yuedu/shuyuan/index.html"
+            resp = await client.get(proxy_url)
             resp.raise_for_status()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch yckceo list: {e}")
@@ -82,10 +77,10 @@ async def import_from_yckceo(count: int = Query(default=10, le=30)):
         raise HTTPException(status_code=400, detail="No sources found on page")
 
     all_sources = []
-    async with httpx.AsyncClient(timeout=15, verify=ctx) as client:
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         for sid in ids:
             try:
-                r = await client.get(f"https://www.yckceo.com/yuedu/shuyuan/json/id/{sid}.json")
+                r = await client.get(f"{CF_PROXY}?url=https://www.yckceo.com/yuedu/shuyuan/json/id/{sid}.json")
                 if r.status_code == 200:
                     data = r.json()
                     if isinstance(data, list):
@@ -102,18 +97,16 @@ async def import_from_yckceo(count: int = Query(default=10, le=30)):
     return ImportResponse(count=imported)
 
 
+CF_PROXY = "https://tv.rio.edu.kg/reader-proxy"
+
+
 @router.post("/import-manga", response_model=ImportResponse)
 async def import_manga_sources(count: int = Query(default=10, le=30)):
-    """Fetch manga sources from yckceo legadotauri."""
-    import ssl
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    ctx.set_ciphers("DEFAULT:@SECLEVEL=0")
-
+    """Fetch manga sources from yckceo legadotauri via CF proxy."""
     try:
-        async with httpx.AsyncClient(timeout=20, verify=ctx) as client:
-            resp = await client.get("https://www.yckceo.com/legadotauri/shuyuan/index.html")
+        async with httpx.AsyncClient(timeout=25, follow_redirects=True) as client:
+            proxy_url = f"{CF_PROXY}?url=https://www.yckceo.com/legadotauri/shuyuan/index.html"
+            resp = await client.get(proxy_url)
             resp.raise_for_status()
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch manga list: {e}")
@@ -130,10 +123,10 @@ async def import_manga_sources(count: int = Query(default=10, le=30)):
         raise HTTPException(status_code=400, detail="No manga sources found")
 
     all_sources = []
-    async with httpx.AsyncClient(timeout=15, verify=ctx) as client:
+    async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         for sid in ids:
             try:
-                r = await client.get(f"https://www.yckceo.com/legadotauri/shuyuan/json/id/{sid}.json")
+                r = await client.get(f"{CF_PROXY}?url=https://www.yckceo.com/legadotauri/shuyuan/json/id/{sid}.json")
                 if r.status_code == 200:
                     data = r.json()
                     if isinstance(data, list):
