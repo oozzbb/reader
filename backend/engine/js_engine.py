@@ -142,6 +142,70 @@ class TauriEngine:
     def _inject_bridge(self):
         ctx = self._ctx
 
+        # DOM store for parsed documents
+        self._dom_store: dict[int, "BeautifulSoup"] = {}
+        self._dom_counter = 0
+
+        def dom_parse(html: str) -> int:
+            from bs4 import BeautifulSoup
+            self._dom_counter += 1
+            self._dom_store[self._dom_counter] = BeautifulSoup(html, "lxml")
+            return self._dom_counter
+
+        def dom_free(doc_id: int) -> str:
+            self._dom_store.pop(int(doc_id), None)
+            return ""
+
+        def dom_select_all(doc_id: int, selector: str) -> str:
+            doc = self._dom_store.get(int(doc_id))
+            if not doc:
+                return "[]"
+            elements = doc.select(selector)
+            ids = []
+            for el in elements:
+                self._dom_counter += 1
+                self._dom_store[self._dom_counter] = el
+                ids.append(self._dom_counter)
+            return json.dumps(ids)
+
+        def dom_select(doc_id: int, selector: str) -> int:
+            doc = self._dom_store.get(int(doc_id))
+            if not doc:
+                return 0
+            el = doc.select_one(selector)
+            if not el:
+                return 0
+            self._dom_counter += 1
+            self._dom_store[self._dom_counter] = el
+            return self._dom_counter
+
+        def dom_select_text(doc_id: int, selector: str) -> str:
+            doc = self._dom_store.get(int(doc_id))
+            if not doc:
+                return ""
+            el = doc.select_one(selector)
+            return el.get_text(strip=True) if el else ""
+
+        def dom_select_attr(doc_id: int, selector: str, attr: str) -> str:
+            doc = self._dom_store.get(int(doc_id))
+            if not doc:
+                return ""
+            el = doc.select_one(selector)
+            return el.get(attr, "") if el else ""
+
+        def dom_attr(doc_id, attr: str) -> str:
+            try:
+                did = int(doc_id)
+            except (TypeError, ValueError):
+                return ""
+            doc = self._dom_store.get(did)
+            if not doc:
+                return ""
+            if hasattr(doc, "get"):
+                val = doc.get(attr, "")
+                return val if isinstance(val, str) else ""
+            return ""
+
         bridge_js = """
         function getText(url, headers) {
             return __getText(url, JSON.stringify(headers || {}));
@@ -154,13 +218,46 @@ class TauriEngine:
             try { return JSON.parse(t); } catch(e) { return null; }
         }
         function log(msg) { __log(String(msg)); }
-        function encodeURI(s) { return encodeURIComponent(s); }
+
+        var legado = {
+            http: {
+                get: function(url, headers) { return __getText(url, JSON.stringify(headers || {})); },
+                post: function(url, body, headers) { return __postText(url, body || "", JSON.stringify(headers || {})); }
+            },
+            dom: {
+                parse: function(html) { return __domParse(html); },
+                free: function(docId) { __domFree(docId); },
+                selectAll: function(docId, selector) { return JSON.parse(__domSelectAll(docId, selector)); },
+                select: function(docId, selector) { return __domSelect(docId, selector); },
+                selectText: function(docId, selector) { return __domSelectText(docId, selector); },
+                selectAttr: function(docId, selector, attr) { return __domSelectAttr(docId, selector, attr); },
+                attr: function(docId, attr) { return __domAttr(docId, attr); }
+            },
+            log: function(msg) { __log(String(msg)); },
+            sleep: function(ms) {},
+            toast: function(msg) { __log(String(msg)); },
+            browser: {
+                acquire: function() { return 0; },
+                navigate: function() {},
+                html: function() { return ""; },
+                show: function() {},
+                hide: function() {},
+                cookies: function() {}
+            }
+        };
         """
         ctx.eval(bridge_js)
 
         ctx.add_callable("__getText", _sync_http_get)
         ctx.add_callable("__postText", _sync_http_post)
         ctx.add_callable("__log", lambda msg: logger.debug(f"Tauri: {msg}"))
+        ctx.add_callable("__domParse", dom_parse)
+        ctx.add_callable("__domFree", dom_free)
+        ctx.add_callable("__domSelectAll", dom_select_all)
+        ctx.add_callable("__domSelect", dom_select)
+        ctx.add_callable("__domSelectText", dom_select_text)
+        ctx.add_callable("__domSelectAttr", dom_select_attr)
+        ctx.add_callable("__domAttr", dom_attr)
 
     def _load_source(self):
         try:
