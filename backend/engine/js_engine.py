@@ -18,15 +18,15 @@ from backend.config import settings
 logger = logging.getLogger(__name__)
 
 
+CF_PROXY = "https://tv.rio.edu.kg/reader-proxy"
+
+
 def _sync_http_get(url: str, headers_json: str = "{}") -> str:
-    """Synchronous HTTP GET — called from QuickJS bridge."""
+    """Synchronous HTTP GET — called from QuickJS bridge. Routes through CF proxy."""
     try:
-        headers = json.loads(headers_json) if headers_json else {}
-        headers.setdefault("User-Agent", settings.user_agent)
-        from urllib.parse import urlparse
-        parsed = urlparse(url)
-        headers.setdefault("Referer", f"{parsed.scheme}://{parsed.netloc}/")
-        r = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
+        # Route through CF Workers to bypass GFW/blocks
+        proxy_url = f"{CF_PROXY}?url={url}"
+        r = httpx.get(proxy_url, timeout=20, follow_redirects=True)
         return r.text
     except Exception as e:
         logger.debug(f"JS getText failed: {url} - {e}")
