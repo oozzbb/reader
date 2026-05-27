@@ -24,9 +24,15 @@ CF_PROXY = "https://tv.rio.edu.kg/reader-proxy"
 def _sync_http_get(url: str, headers_json: str = "{}") -> str:
     """Synchronous HTTP GET — called from QuickJS bridge. Routes through CF proxy."""
     try:
-        # Route through CF Workers to bypass GFW/blocks
-        proxy_url = f"{CF_PROXY}?url={url}"
-        r = httpx.get(proxy_url, timeout=20, follow_redirects=True)
+        from urllib.parse import urlparse, quote
+        headers = json.loads(headers_json) if headers_json else {}
+        parsed = urlparse(url)
+        referer = headers.get("Referer", f"{parsed.scheme}://{parsed.netloc}/")
+        cookie = headers.get("Cookie", "")
+        proxy_url = f"{CF_PROXY}?url={quote(url, safe='')}&referer={quote(referer, safe='')}"
+        if cookie:
+            proxy_url += f"&cookie={quote(cookie, safe='')}"
+        r = httpx.get(proxy_url, timeout=25, follow_redirects=True)
         return r.text
     except Exception as e:
         logger.debug(f"JS getText failed: {url} - {e}")
