@@ -1,3 +1,4 @@
+import json
 import re
 
 from fastapi import APIRouter, Query, HTTPException
@@ -36,6 +37,15 @@ async def chapter_content(
     content = await get_chapter_content(url, source_url)
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
+
+    # Check if content is a JSON array of image URLs (from Tauri manga sources)
+    if content.strip().startswith("["):
+        try:
+            parsed = json.loads(content)
+            if isinstance(parsed, list) and len(parsed) >= 1 and isinstance(parsed[0], str) and parsed[0].startswith("http"):
+                return {"type": "manga", "images": parsed, "content": ""}
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     images = _extract_images(content)
     if images:
