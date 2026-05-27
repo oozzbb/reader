@@ -9,7 +9,8 @@ from backend.engine.fetcher import fetch, parse_headers
 from backend.engine.url_parser import make_absolute_url
 from backend.models.source import BookSourceSchema, BookInfoRule
 from backend.models.book import BookSchema, ChapterSchema
-from backend.services.source_manager import get_source
+from backend.services.source_manager import get_source, get_source_raw
+from backend.engine.js_engine import TauriEngine
 from backend.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,10 @@ async def get_book_info(book_url: str, source_url: str) -> BookSchema | None:
 
 async def get_chapters(book_url: str, source_url: str) -> list[ChapterSchema]:
     """Fetch and parse chapter list (TOC) for a book."""
+    raw = await get_source_raw(source_url)
+    if raw and raw[1] == "tauri":
+        return await _get_chapters_tauri(raw[0], source_url, book_url)
+
     source = await get_source(source_url)
     if not source:
         return []
@@ -203,6 +208,10 @@ async def get_chapter_content(
     source_url: str,
 ) -> str:
     """Fetch and parse chapter text content."""
+    raw = await get_source_raw(source_url)
+    if raw and raw[1] == "tauri":
+        return await _get_chapter_content_tauri(raw[0], source_url, chapter_url)
+
     source = await get_source(source_url)
     if not source:
         return ""
@@ -308,3 +317,42 @@ def _clean_content(text: str) -> str:
             result.append(line)
             prev_empty = False
     return "\n".join(result)
+
+
+# --- Tauri engine helpers ---
+
+async def _get_chapters_tauri(source_code: str, source_url: str, book_url: str) -> list[ChapterSchema]:
+    """Get chapters using Tauri JS engine."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+
+    def run():
+        engine = TauriEngine(source_code, source_url)
+        return engine.chapter_list(book_url)
+
+    raw = await loop.run_in_executor(None, run)
+    chapters = []
+    for idx, item in enumerate(raw):
+        title = item.get("title") or item.get("name") or ""
+        url = item.get("url") or item.get("chapterUrl") or ""
+        if not title:
+            continue
+        chapters.append(ChapterSchema(
+            book_id=0,
+            title=title,
+            url=url,
+            idx=idx,
+        ))
+    return chapters
+
+
+async def _get_chapter_content_tauri(source_code: str, source_url: str, chapter_url: str) -> str:
+    """Get chapter content using Tauri JS engine."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+
+    def run():
+        engine = TauriEngine(source_code, source_url)
+        return engine.chapter_content(chapter_url)
+
+    return await loop.run_in_executor(None, run)

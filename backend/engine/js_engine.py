@@ -1,76 +1,95 @@
-"""QuickJS sandbox for executing book source JavaScript rules.
+"""QuickJS sandbox with full HTTP bridge.
 
-Injects a minimal `java` bridge object with:
-- java.ajax(url) / java.get(url) — HTTP GET
-- java.post(url, body) — HTTP POST
-- java.base64Encode(str) / java.base64Decode(str)
-- java.log(msg) — no-op
+Two modes:
+1. Legado snippet: execute(@js: ...) with result variable
+2. Tauri full source: load JS file, call search()/chapterContent() etc.
 """
 
 import base64
 import json
+import logging
+import re
 
+import httpx
 import quickjs
+
+from backend.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+def _sync_http_get(url: str, headers_json: str = "{}") -> str:
+    """Synchronous HTTP GET — called from QuickJS bridge."""
+    try:
+        headers = json.loads(headers_json) if headers_json else {}
+        headers.setdefault("User-Agent", settings.user_agent)
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        headers.setdefault("Referer", f"{parsed.scheme}://{parsed.netloc}/")
+        r = httpx.get(url, headers=headers, timeout=15, follow_redirects=True)
+        return r.text
+    except Exception as e:
+        logger.debug(f"JS getText failed: {url} - {e}")
+        return ""
+
+
+def _sync_http_post(url: str, body: str = "", headers_json: str = "{}") -> str:
+    """Synchronous HTTP POST — called from QuickJS bridge."""
+    try:
+        headers = json.loads(headers_json) if headers_json else {}
+        headers.setdefault("User-Agent", settings.user_agent)
+        r = httpx.post(url, content=body, headers=headers, timeout=15, follow_redirects=True)
+        return r.text
+    except Exception as e:
+        logger.debug(f"JS postText failed: {url} - {e}")
+        return ""
 
 
 class JSEngine:
+    """QuickJS engine for Legado @js: snippets."""
+
     def __init__(self):
         self._context: quickjs.Context | None = None
 
     def _get_context(self) -> quickjs.Context:
         if self._context is None:
             self._context = quickjs.Context()
-            self._inject_bridge()
+            self._inject_bridge(self._context)
         return self._context
 
-    def _inject_bridge(self):
-        ctx = self._context
-
+    def _inject_bridge(self, ctx: quickjs.Context):
         bridge_js = """
-        var java = {
-            _ajax_results: {},
-            ajax: function(url) { return ""; },
-            get: function(url) { return java.ajax(url); },
-            post: function(url, body, headers) { return ""; },
-            base64Encode: function(str) { return __base64Encode(str); },
-            base64Decode: function(str) { return __base64Decode(str); },
-            log: function(msg) {},
-            put: function(key, value) {},
-            get: function(key) { return ""; },
-        };
         var result = "";
         var baseUrl = "";
         var key = "";
         var page = 1;
         var keyword = "";
+
+        var java = {
+            ajax: function(url) { return __getText(url, "{}"); },
+            get: function(url) { return __getText(url, "{}"); },
+            post: function(url, body, headers) { return __postText(url, body || "", JSON.stringify(headers || {})); },
+            base64Encode: function(str) { return __base64Encode(str); },
+            base64Decode: function(str) { return __base64Decode(str); },
+            log: function(msg) { __log(String(msg)); },
+            put: function(key, value) {},
+        };
         """
         ctx.eval(bridge_js)
 
-        def base64_encode(s):
-            if isinstance(s, str):
-                return base64.b64encode(s.encode()).decode()
-            return ""
-
-        def base64_decode(s):
-            if isinstance(s, str):
-                try:
-                    return base64.b64decode(s).decode()
-                except Exception:
-                    return ""
-            return ""
-
-        ctx.add_callable("__base64Encode", base64_encode)
-        ctx.add_callable("__base64Decode", base64_decode)
+        ctx.add_callable("__getText", _sync_http_get)
+        ctx.add_callable("__postText", _sync_http_post)
+        ctx.add_callable("__base64Encode", lambda s: base64.b64encode(s.encode()).decode() if isinstance(s, str) else "")
+        ctx.add_callable("__base64Decode", lambda s: base64.b64decode(s).decode() if isinstance(s, str) else "")
+        ctx.add_callable("__log", lambda msg: logger.debug(f"JS: {msg}"))
 
     def execute(self, script: str, result: str = "", **variables) -> str:
         ctx = self._get_context()
 
-        # Set variables
         ctx.eval(f"result = {json.dumps(result or '')};")
         for k, v in variables.items():
             ctx.eval(f"{k} = {json.dumps(str(v))};")
 
-        # Clean script tags
         script = script.strip()
         if script.startswith("<js>"):
             script = script[4:]
@@ -85,12 +104,126 @@ class JSEngine:
             if val is None:
                 return ""
             return str(val)
-        except Exception:
+        except Exception as e:
+            logger.debug(f"JS eval error: {e}")
             return ""
 
     def reset(self):
         self._context = None
 
+
+class TauriEngine:
+    """Execute Legado Tauri JS source files."""
+
+    def __init__(self, source_code: str, source_url: str = ""):
+        self._source_code = self._preprocess(source_code)
+        self._source_url = source_url
+        self._ctx: quickjs.Context | None = None
+
+    def _preprocess(self, code: str) -> str:
+        """Strip async/await so QuickJS can run it synchronously."""
+        code = re.sub(r'\basync\s+function\b', 'function', code)
+        code = re.sub(r'\bawait\s+', '', code)
+        return code
+
+    def _get_context(self) -> quickjs.Context:
+        if self._ctx is None:
+            self._ctx = quickjs.Context()
+            self._inject_bridge()
+            self._load_source()
+        return self._ctx
+
+    def _inject_bridge(self):
+        ctx = self._ctx
+
+        bridge_js = """
+        function getText(url, headers) {
+            return __getText(url, JSON.stringify(headers || {}));
+        }
+        function postText(url, body, headers) {
+            return __postText(url, body || "", JSON.stringify(headers || {}));
+        }
+        function getJson(url, headers) {
+            var t = getText(url, headers);
+            try { return JSON.parse(t); } catch(e) { return null; }
+        }
+        function log(msg) { __log(String(msg)); }
+        function encodeURI(s) { return encodeURIComponent(s); }
+        """
+        ctx.eval(bridge_js)
+
+        ctx.add_callable("__getText", _sync_http_get)
+        ctx.add_callable("__postText", _sync_http_post)
+        ctx.add_callable("__log", lambda msg: logger.debug(f"Tauri: {msg}"))
+
+    def _load_source(self):
+        try:
+            self._ctx.eval(self._source_code)
+        except Exception as e:
+            logger.warning(f"Tauri source load error: {e}")
+
+    def call(self, func_name: str, *args) -> str:
+        """Call a function in the source and return JSON string result."""
+        ctx = self._get_context()
+        args_json = ", ".join(json.dumps(a) for a in args)
+        call_expr = f"JSON.stringify({func_name}({args_json}))"
+        try:
+            result = ctx.eval(call_expr)
+            return result if result else "[]"
+        except Exception as e:
+            logger.warning(f"Tauri call {func_name} error: {e}")
+            return "[]"
+
+    def search(self, keyword: str, page: int = 1) -> list[dict]:
+        result = self.call("search", keyword, page)
+        try:
+            return json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def book_info(self, book_url: str) -> dict | None:
+        result = self.call("bookInfo", book_url)
+        try:
+            data = json.loads(result)
+            return data if isinstance(data, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            return None
+
+    def chapter_list(self, book_url: str) -> list[dict]:
+        result = self.call("chapterList", book_url)
+        try:
+            data = json.loads(result)
+            return data if isinstance(data, list) else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def chapter_content(self, chapter_url: str) -> str:
+        result = self.call("chapterContent", chapter_url)
+        try:
+            data = json.loads(result)
+            if isinstance(data, list):
+                return json.dumps(data)
+            return str(data) if data else ""
+        except (json.JSONDecodeError, TypeError):
+            return result or ""
+
+
+def parse_tauri_metadata(source_code: str) -> dict:
+    """Parse @name, @url, @type etc. from JS header comments."""
+    meta = {}
+    for line in source_code.split("\n")[:30]:
+        line = line.strip()
+        if not line.startswith("//"):
+            if line and not line.startswith("/*"):
+                break
+            continue
+        m = re.match(r'//\s*@(\w+)\s+(.+)', line)
+        if m:
+            meta[m.group(1)] = m.group(2).strip()
+    return meta
+
+
+# --- Legacy API (used by existing Legado rule engine) ---
 
 _engine = JSEngine()
 

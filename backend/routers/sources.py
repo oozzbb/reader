@@ -122,25 +122,31 @@ async def import_manga_sources(count: int = Query(default=10, le=30)):
     if not ids:
         raise HTTPException(status_code=400, detail="No manga sources found")
 
-    all_sources = []
+    imported_count = 0
     async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
         for sid in ids:
             try:
                 r = await client.get(f"{CF_PROXY}?url=https://www.yckceo.com/legadotauri/shuyuan/json/id/{sid}.json")
                 if r.status_code == 200:
-                    data = r.json()
-                    if isinstance(data, list):
-                        all_sources.extend(data)
+                    text = r.text
+                    if text.strip().startswith("//") or "function search" in text:
+                        ok = await source_manager.import_tauri_source(text)
+                        if ok:
+                            imported_count += 1
                     else:
-                        all_sources.append(data)
+                        try:
+                            data = r.json()
+                            sources = data if isinstance(data, list) else [data]
+                            imported_count += await source_manager.import_sources(sources)
+                        except Exception:
+                            pass
             except Exception:
                 continue
 
-    if not all_sources:
+    if imported_count == 0:
         raise HTTPException(status_code=400, detail="Failed to fetch any manga source")
 
-    imported = await source_manager.import_sources(all_sources)
-    return ImportResponse(count=imported)
+    return ImportResponse(count=imported_count)
 
 
 @router.get("", response_model=list[SourceItem])

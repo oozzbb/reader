@@ -8,6 +8,7 @@ from backend.config import settings
 from backend.engine.parser import RuleParser
 from backend.engine.fetcher import fetch, parse_headers
 from backend.engine.url_parser import parse_url, make_absolute_url
+from backend.engine.js_engine import TauriEngine
 from backend.models.source import BookSourceSchema
 from backend.models.book import SearchResultItem
 from backend.services.source_manager import list_sources
@@ -57,7 +58,7 @@ async def search_books_stream(keyword: str, source_urls: list[str] | None = None
     sem = asyncio.Semaphore(settings.max_concurrent_requests)
     queue: asyncio.Queue[list[SearchResultItem] | None] = asyncio.Queue()
 
-    async def search_and_enqueue(source: BookSourceSchema):
+    async def search_and_enqueue_legado(source: BookSourceSchema):
         async with sem:
             try:
                 results = await _do_search(source, keyword)
@@ -66,12 +67,34 @@ async def search_books_stream(keyword: str, source_urls: list[str] | None = None
             except Exception as e:
                 logger.warning("Search failed for %s: %s", source.bookSourceName, e)
 
+    async def search_and_enqueue_tauri(source_code: str, source_url: str, source_name: str):
+        async with sem:
+            try:
+                loop = asyncio.get_event_loop()
+                results = await loop.run_in_executor(None, _do_tauri_search, source_code, source_url, source_name, keyword)
+                if results:
+                    await queue.put(results)
+            except Exception as e:
+                logger.warning("Tauri search failed for %s: %s", source_name, e)
+
     tasks = []
     for source_db in sources_db:
-        source = BookSourceSchema.model_validate(json.loads(source_db.source_json))
-        if not source.searchUrl:
-            continue
-        tasks.append(asyncio.create_task(search_and_enqueue(source)))
+        raw = source_db.source_json
+        is_tauri = raw.strip().startswith("//") or "function search" in raw[:500]
+        if is_tauri:
+            from backend.engine.js_engine import parse_tauri_metadata
+            meta = parse_tauri_metadata(raw)
+            tasks.append(asyncio.create_task(
+                search_and_enqueue_tauri(raw, source_db.book_source_url, meta.get("name", source_db.book_source_name))
+            ))
+        else:
+            try:
+                source = BookSourceSchema.model_validate(json.loads(raw))
+            except Exception:
+                continue
+            if not source.searchUrl:
+                continue
+            tasks.append(asyncio.create_task(search_and_enqueue_legado(source)))
 
     async def wait_all():
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -84,6 +107,29 @@ async def search_books_stream(keyword: str, source_urls: list[str] | None = None
         if batch is None:
             break
         yield batch
+
+
+def _do_tauri_search(source_code: str, source_url: str, source_name: str, keyword: str) -> list[SearchResultItem]:
+    """Run Tauri source search synchronously (called in executor)."""
+    engine = TauriEngine(source_code, source_url)
+    raw_results = engine.search(keyword, 1)
+    results = []
+    for item in raw_results[:20]:
+        name = item.get("name") or item.get("title") or ""
+        if not name:
+            continue
+        results.append(SearchResultItem(
+            name=name,
+            author=item.get("author", ""),
+            cover_url=item.get("coverUrl", ""),
+            intro=item.get("intro", ""),
+            book_url=item.get("bookUrl") or item.get("tocUrl") or "",
+            source_url=source_url,
+            source_name=source_name,
+            last_chapter=item.get("latestChapter") or item.get("lastChapter") or "",
+            kind=item.get("kind", ""),
+        ))
+    return results
 
 
 async def _search_single_source(

@@ -6,6 +6,7 @@ import aiosqlite
 
 from backend.database import get_db
 from backend.models.source import BookSourceSchema, BookSourceInDB
+from backend.engine.js_engine import parse_tauri_metadata
 
 
 async def import_sources(sources_json: list[dict]) -> int:
@@ -35,6 +36,32 @@ async def import_sources(sources_json: list[dict]) -> int:
 
     await db.commit()
     return count
+
+
+async def import_tauri_source(source_code: str) -> bool:
+    """Import a single Tauri JS source file."""
+    meta = parse_tauri_metadata(source_code)
+    if not meta.get("name") or not meta.get("url"):
+        return False
+
+    db = await get_db()
+    source_type = 2 if meta.get("type") == "comic" else 0
+
+    await db.execute(
+        """INSERT OR REPLACE INTO book_sources
+        (book_source_url, book_source_name, book_source_group,
+         book_source_type, enabled, source_json, source_format, updated_at)
+        VALUES (?, ?, ?, ?, 1, ?, 'tauri', datetime('now'))""",
+        (
+            meta["url"],
+            meta["name"],
+            meta.get("tags", ""),
+            source_type,
+            source_code,
+        ),
+    )
+    await db.commit()
+    return True
 
 
 async def list_sources(
@@ -80,7 +107,25 @@ async def get_source(source_url: str) -> BookSourceSchema | None:
     row = await cursor.fetchone()
     if not row:
         return None
-    return BookSourceSchema.model_validate(json.loads(row["source_json"]))
+    # Check if it's tauri format (source_json is JS code, not JSON)
+    source_json = row["source_json"]
+    if source_json.strip().startswith("//") or "function search" in source_json[:500]:
+        return None  # Not a Legado source, use get_source_raw instead
+    return BookSourceSchema.model_validate(json.loads(source_json))
+
+
+async def get_source_raw(source_url: str) -> tuple[str, str] | None:
+    """Get raw source data and format. Returns (source_json/code, source_format)."""
+    db = await get_db()
+    cursor = await db.execute(
+        "SELECT source_json, source_format FROM book_sources WHERE book_source_url = ?",
+        (source_url,),
+    )
+    row = await cursor.fetchone()
+    if not row:
+        return None
+    fmt = row["source_format"] if "source_format" in row.keys() else "legado"
+    return (row["source_json"], fmt)
 
 
 async def toggle_source(source_url: str) -> bool:

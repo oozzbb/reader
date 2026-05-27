@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS book_sources (
     book_source_type INTEGER DEFAULT 0,
     enabled INTEGER DEFAULT 1,
     source_json TEXT NOT NULL,
+    source_format TEXT DEFAULT 'legado',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
 );
