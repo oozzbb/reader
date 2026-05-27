@@ -24,14 +24,15 @@ CF_PROXY = "https://tv.rio.edu.kg/reader-proxy"
 def _sync_http_get(url: str, headers_json: str = "{}") -> str:
     """Synchronous HTTP GET — called from QuickJS bridge. Routes through CF proxy."""
     try:
-        from urllib.parse import urlparse, quote
+        from urllib.parse import urlparse, urlencode
         headers = json.loads(headers_json) if headers_json else {}
         parsed = urlparse(url)
         referer = headers.get("Referer", f"{parsed.scheme}://{parsed.netloc}/")
         cookie = headers.get("Cookie", "")
-        proxy_url = f"{CF_PROXY}?url={quote(url, safe='')}&referer={quote(referer, safe='')}"
+        params = {"url": url, "referer": referer}
         if cookie:
-            proxy_url += f"&cookie={quote(cookie, safe='')}"
+            params["cookie"] = cookie
+        proxy_url = f"{CF_PROXY}?{urlencode(params)}"
         r = httpx.get(proxy_url, timeout=25, follow_redirects=True)
         return r.text
     except Exception as e:
