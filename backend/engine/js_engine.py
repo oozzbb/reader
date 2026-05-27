@@ -22,22 +22,27 @@ CF_PROXY = "https://tv.rio.edu.kg/reader-proxy"
 
 
 def _sync_http_get(url: str, headers_json: str = "{}") -> str:
-    """Synchronous HTTP GET — called from QuickJS bridge. Routes through CF proxy."""
+    """Synchronous HTTP GET — uses curl_cffi to bypass Cloudflare."""
     try:
-        from urllib.parse import urlparse, urlencode
+        from curl_cffi import requests as cf_requests
         headers = json.loads(headers_json) if headers_json else {}
+        from urllib.parse import urlparse
         parsed = urlparse(url)
-        referer = headers.get("Referer", f"{parsed.scheme}://{parsed.netloc}/")
-        cookie = headers.get("Cookie", "")
-        params = {"url": url, "referer": referer}
-        if cookie:
-            params["cookie"] = cookie
-        proxy_url = f"{CF_PROXY}?{urlencode(params)}"
-        r = httpx.get(proxy_url, timeout=25, follow_redirects=True)
+        headers.setdefault("Referer", f"{parsed.scheme}://{parsed.netloc}/")
+        headers.setdefault("User-Agent", settings.user_agent)
+        r = cf_requests.get(url, headers=headers, impersonate="chrome120", timeout=20)
         return r.text
     except Exception as e:
         logger.debug(f"JS getText failed: {url} - {e}")
-        return ""
+        # Fallback to CF proxy
+        try:
+            from urllib.parse import urlencode
+            params = {"url": url}
+            proxy_url = f"{CF_PROXY}?{urlencode(params)}"
+            r = httpx.get(proxy_url, timeout=20, follow_redirects=True)
+            return r.text
+        except Exception:
+            return ""
 
 
 def _sync_http_post(url: str, body: str = "", headers_json: str = "{}") -> str:

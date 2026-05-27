@@ -9,3 +9,4 @@ quickjs>=1.19
 pydantic>=2.5
 pydantic-settings>=2.1
 charset-normalizer>=3.3
+curl_cffi>=0.7
