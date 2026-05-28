@@ -2,6 +2,7 @@ import { Outlet, NavLink } from "react-router-dom";
 
 const tabs = [
   { to: "/", label: "首页" },
+  { to: "/manga", label: "漫画" },
   { to: "/shelf", label: "书架" },
   { to: "/sources", label: "书源" },
 ];

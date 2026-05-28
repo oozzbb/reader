@@ -7,6 +7,7 @@ import BookDetail from "./pages/BookDetail";
 import Read from "./pages/Read";
 import Sources from "./pages/Sources";
 import Shelf from "./pages/Shelf";
+import Manga from "./pages/Manga";
 
 function useVersionCheck() {
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
+        <Route path="/manga" element={<Manga />} />
         <Route path="/shelf" element={<Shelf />} />
         <Route path="/search" element={<Search />} />
         <Route path="/book" element={<BookDetail />} />

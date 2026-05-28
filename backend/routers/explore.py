@@ -74,3 +74,47 @@ async def get_ranking(
                 break
 
     return results
+
+
+@router.get("/manga-ranking", response_model=list[RankItem])
+async def get_manga_ranking(category: str = Query(default="全部漫画")):
+    """Get manga ranking from Tauri sources (G-site explore)."""
+    import asyncio
+    from backend.services.source_manager import get_source_raw
+    from backend.engine.js_engine import TauriEngine
+
+    # Use G-site manga source
+    manga_source_url = "https://m.g-mh.org/"
+    raw = await get_source_raw(manga_source_url)
+    if not raw or raw[1] != "tauri":
+        return []
+
+    source_code = raw[0]
+
+    def run_explore():
+        engine = TauriEngine(source_code, manga_source_url)
+        return engine.call("explore", 1, category)
+
+    loop = asyncio.get_event_loop()
+    try:
+        result_json = await loop.run_in_executor(None, run_explore)
+    except Exception:
+        return []
+
+    import json
+    try:
+        data = json.loads(result_json)
+    except (json.JSONDecodeError, TypeError):
+        return []
+
+    if not isinstance(data, list):
+        return []
+
+    results = []
+    for item in data[:20]:
+        name = item.get("name") or item.get("title") or ""
+        book_url = item.get("bookUrl") or item.get("tocUrl") or ""
+        if name and book_url:
+            results.append(RankItem(name=name, book_url=book_url, source_url=manga_source_url))
+
+    return results

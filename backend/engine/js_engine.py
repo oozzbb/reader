@@ -141,6 +141,11 @@ class TauriEngine:
     def _get_context(self) -> quickjs.Context:
         if self._ctx is None:
             self._ctx = quickjs.Context()
+            # Memory limit: 32MB per source to prevent OOM
+            try:
+                self._ctx.set_memory_limit(32 * 1024 * 1024)
+            except AttributeError:
+                pass  # Older quickjs versions may not support this
             self._inject_bridge()
             self._load_source()
         return self._ctx
@@ -274,6 +279,11 @@ class TauriEngine:
     def call(self, func_name: str, *args) -> str:
         """Call a function in the source and return JSON string result."""
         ctx = self._get_context()
+        # Set execution time limit: 30 seconds per call
+        try:
+            ctx.set_time_limit(30)
+        except (AttributeError, TypeError):
+            pass
         args_json = ", ".join(json.dumps(a) for a in args)
         call_expr = f"JSON.stringify({func_name}({args_json}))"
         try:

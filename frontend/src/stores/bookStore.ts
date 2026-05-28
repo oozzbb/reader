@@ -2,8 +2,36 @@ import { create } from "zustand";
 import { SearchResult, Chapter } from "@/api/client";
 import { api } from "@/api/client";
 
+function scoreResult(item: SearchResult, keyword: string): number {
+  const kw = keyword.toLowerCase();
+  const name = (item.name || "").toLowerCase();
+  if (name === kw) return 3;
+  if (name.includes(kw)) return 2;
+  const author = (item.author || "").toLowerCase();
+  const intro = (item.intro || "").toLowerCase();
+  if (author.includes(kw) || intro.includes(kw)) return 1;
+  return 0;
+}
+
+function dedupeAndSort(results: SearchResult[], keyword: string): SearchResult[] {
+  const scored = results.map((r) => ({ ...r, _score: scoreResult(r, keyword) }));
+  scored.sort((a, b) => b._score - a._score);
+
+  const seen = new Map<string, number>();
+  const deduped: SearchResult[] = [];
+  for (const item of scored) {
+    const key = `${item.name}|${item.author}`.toLowerCase();
+    const existing = seen.get(key);
+    if (existing !== undefined) continue;
+    seen.set(key, deduped.length);
+    deduped.push(item);
+  }
+  return deduped;
+}
+
 interface BookState {
   searchResults: SearchResult[];
+  searchKeyword: string;
   chapters: Chapter[];
   loading: boolean;
   error: string;
@@ -11,14 +39,15 @@ interface BookState {
   loadChapters: (bookUrl: string, sourceUrl: string) => Promise<void>;
 }
 
-export const useBookStore = create<BookState>((set, get) => ({
+export const useBookStore = create<BookState>((set) => ({
   searchResults: [],
+  searchKeyword: "",
   chapters: [],
   loading: false,
   error: "",
 
   search: async (keyword: string) => {
-    set({ searchResults: [], loading: true, error: "" });
+    set({ searchResults: [], searchKeyword: keyword, loading: true, error: "" });
 
     try {
       const response = await fetch(
@@ -30,6 +59,7 @@ export const useBookStore = create<BookState>((set, get) => ({
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      let allResults: SearchResult[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -46,7 +76,8 @@ export const useBookStore = create<BookState>((set, get) => ({
 
           try {
             const batch: SearchResult[] = JSON.parse(payload);
-            set({ searchResults: [...get().searchResults, ...batch] });
+            allResults = [...allResults, ...batch];
+            set({ searchResults: dedupeAndSort(allResults, keyword) });
           } catch {
             // skip malformed lines
           }
