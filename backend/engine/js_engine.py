@@ -279,11 +279,6 @@ class TauriEngine:
     def call(self, func_name: str, *args) -> str:
         """Call a function in the source and return JSON string result."""
         ctx = self._get_context()
-        # Set execution time limit: 30 seconds per call
-        try:
-            ctx.set_time_limit(30)
-        except (AttributeError, TypeError):
-            pass
         args_json = ", ".join(json.dumps(a) for a in args)
         call_expr = f"JSON.stringify({func_name}({args_json}))"
         try:
