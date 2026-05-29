@@ -10,7 +10,8 @@ Legado URL formats:
 
 import json
 import re
-from urllib.parse import quote
+import ast
+from urllib.parse import quote, urljoin, urlparse
 
 
 def parse_url(
@@ -28,11 +29,39 @@ def parse_url(
     if not url_template:
         return {"url": "", "method": "GET", "headers": {}, "body": None, "charset": None}
 
-    # Clean whitespace/newlines from URL template
-    url_template = url_template.replace("\n", "").replace("\r", "").strip()
+    url_template = url_template.strip()
+
+    if url_template.startswith("@js:") or url_template.startswith("<js>"):
+        from backend.engine import js_engine
+
+        url_template = js_engine.execute(
+            url_template,
+            "",
+            key=keyword,
+            keyword=keyword,
+            page=page,
+            baseUrl=base_url or source_url,
+            sourceUrl=source_url,
+        ).strip()
+        if not url_template or url_template in {"/", "#"}:
+            return {"url": "", "method": "GET", "headers": {}, "body": None, "charset": None}
+
+    # Clean control whitespace that often appears in imported Legado URL templates.
+    url_template = re.sub(r"[\t\r\n]+", "", url_template).strip()
+    if url_template in {"/", "#"}:
+        return {"url": "", "method": "GET", "headers": {}, "body": None, "charset": None}
+    if _is_unusable_url(url_template):
+        return {"url": "", "method": "GET", "headers": {}, "body": None, "charset": None}
 
     # Variable substitution
-    url_template = _substitute_vars(url_template, keyword=keyword, page=page)
+    url_template = _substitute_vars(
+        url_template,
+        keyword=keyword,
+        page=page,
+        source_url=source_url or base_url,
+    )
+    if "{{" in url_template and "}}" in url_template:
+        return {"url": "", "method": "GET", "headers": {}, "body": None, "charset": None}
 
     # Extract charset option
     charset = None
@@ -58,11 +87,16 @@ def parse_url(
     body = None
 
     # JSON config format: url,{"method":"POST","body":"..."}
-    json_config_match = re.match(r"^(https?://[^,]+),\s*(\{.+\})\s*$", url_template, re.DOTALL)
+    # The URL part may be absolute or relative in imported Legado sources.
+    json_config_match = re.match(r"^([^,]+),\s*(\{.+\})\s*$", url_template, re.DOTALL)
     if json_config_match:
-        url = json_config_match.group(1)
+        url = json_config_match.group(1).strip()
+        if not url.startswith("http"):
+            origin = _get_origin(source_url or base_url)
+            if origin:
+                url = make_absolute_url(url, origin)
         try:
-            config = json.loads(json_config_match.group(2))
+            config = _parse_config_object(json_config_match.group(2))
             method = config.get("method", "POST").upper()
             body = config.get("body", "")
             if "headers" in config:
@@ -102,19 +136,68 @@ def _get_origin(url: str) -> str:
     return ""
 
 
-def _substitute_vars(template: str, keyword: str = "", page: int = 1) -> str:
+def _is_unusable_url(url: str) -> bool:
+    parsed = urlparse(url)
+    return bool(parsed.scheme) and not parsed.netloc
+
+
+def _parse_config_object(raw: str) -> dict:
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        normalized = _normalize_js_object(raw)
+        try:
+            value = ast.literal_eval(normalized)
+        except (ValueError, SyntaxError):
+            raise json.JSONDecodeError("Invalid URL config object", raw, 0)
+    return value if isinstance(value, dict) else {}
+
+
+def _normalize_js_object(raw: str) -> str:
+    """Normalize simple JS object literals used by older Legado sources."""
+    normalized = raw.strip()
+    normalized = re.sub(r"([{,]\s*)([A-Za-z_][A-Za-z0-9_-]*)(\s*:)", r"\1'\2'\3", normalized)
+    return normalized
+
+
+def _substitute_vars(template: str, keyword: str = "", page: int = 1, source_url: str = "") -> str:
     template = template.replace("{{key}}", quote(keyword))
     template = template.replace("{{keyword}}", quote(keyword))
     template = template.replace("{{page}}", str(page))
     # Legado also uses searchKey and searchPage
     template = template.replace("{{searchKey}}", quote(keyword))
     template = template.replace("{{searchPage}}", str(page))
+    template = _substitute_source_key(template, source_url)
     # Handle {page - 1} style expressions
     template = re.sub(
         r"\{\{page\s*([+-])\s*(\d+)\}\}",
         lambda m: str(page + int(m.group(2)) * (1 if m.group(1) == "+" else -1)),
         template,
     )
+    return template
+
+
+def _substitute_source_key(template: str, source_url: str) -> str:
+    if not source_url:
+        return template
+
+    parsed = urlparse(source_url)
+    if not parsed.scheme or not parsed.netloc:
+        return template
+
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    host = parsed.netloc
+    expressions = (
+        "source.getKey()",
+        "cookie.removeCookie(source.getKey())",
+    )
+
+    for expr in expressions:
+        token = "{{" + expr + "}}"
+        if f"://{token}" in template:
+            template = template.replace(token, host)
+        else:
+            template = template.replace(token, origin)
     return template
 
 
@@ -132,6 +215,5 @@ def make_absolute_url(url: str, base_url: str) -> str:
         return f"{parsed.scheme}://{parsed.netloc}{url}"
     # Relative path
     if base_url:
-        base = base_url.rsplit("/", 1)[0]
-        return f"{base}/{url}"
+        return urljoin(base_url, url)
     return url

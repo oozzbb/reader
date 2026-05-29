@@ -6,6 +6,7 @@ Two modes:
 """
 
 import base64
+import hashlib
 import json
 import logging
 import re
@@ -83,6 +84,7 @@ class JSEngine:
             post: function(url, body, headers) { return __postText(url, body || "", JSON.stringify(headers || {})); },
             base64Encode: function(str) { return __base64Encode(str); },
             base64Decode: function(str) { return __base64Decode(str); },
+            md5Encode: function(str) { return __md5Encode(str); },
             log: function(msg) { __log(String(msg)); },
             put: function(key, value) {},
         };
@@ -93,6 +95,7 @@ class JSEngine:
         ctx.add_callable("__postText", _sync_http_post)
         ctx.add_callable("__base64Encode", lambda s: base64.b64encode(s.encode()).decode() if isinstance(s, str) else "")
         ctx.add_callable("__base64Decode", lambda s: base64.b64decode(s).decode() if isinstance(s, str) else "")
+        ctx.add_callable("__md5Encode", lambda s: hashlib.md5(s.encode()).hexdigest() if isinstance(s, str) else "")
         ctx.add_callable("__log", lambda msg: logger.debug(f"JS: {msg}"))
 
     def execute(self, script: str, result: str = "", **variables) -> str:

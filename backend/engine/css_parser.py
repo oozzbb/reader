@@ -14,6 +14,7 @@ Legado uses a JSOUP-like syntax for CSS selectors:
 """
 
 from bs4 import BeautifulSoup, Tag
+import re
 
 
 def parse(rule: str, content: str | Tag) -> str | list[str]:
@@ -31,7 +32,7 @@ def parse_list(rule: str, content: str | Tag) -> list[Tag]:
         css_rule = rule[5:]
         selector, _ = _split_attr_selector(css_rule)
         soup = _ensure_soup(content)
-        return soup.select(selector)
+        return _select_css(soup, selector)
     return _parse_jsoup_list(rule, content)
 
 
@@ -44,7 +45,7 @@ def _ensure_soup(content: str | Tag) -> BeautifulSoup | Tag:
 def _parse_css(rule: str, content: str | Tag) -> str | list[str]:
     selector, attr = _split_attr_selector(rule)
     soup = _ensure_soup(content)
-    elements = soup.select(selector)
+    elements = _select_css(soup, selector)
     if not elements:
         return ""
     if attr:
@@ -78,6 +79,36 @@ def _get_attr(element: Tag, attr: str) -> str:
     if attr == "innerHTML" or attr == "html":
         return element.decode_contents()
     return element.get(attr, "")
+
+
+def _select_css(soup: BeautifulSoup | Tag, selector: str) -> list[Tag]:
+    selector, index_filter, suffix = _extract_index_filter(selector)
+    elements = soup.select(selector)
+    if not index_filter:
+        return elements
+
+    op, index = index_filter
+    if op == "lt":
+        elements = elements[:index]
+    if op == "gt":
+        elements = elements[index + 1:]
+    if op == "eq":
+        if index < 0:
+            index = len(elements) + index
+        elements = [elements[index]] if 0 <= index < len(elements) else []
+    if suffix:
+        nested = []
+        for element in elements:
+            nested.extend(element.select(suffix))
+        return nested
+    return elements
+
+
+def _extract_index_filter(selector: str) -> tuple[str, tuple[str, int] | None, str]:
+    match = re.search(r":(lt|gt|eq)\((-?\d+)\)", selector)
+    if not match:
+        return selector, None, ""
+    return selector[: match.start()].strip() or "*", (match.group(1), int(match.group(2))), selector[match.end():].strip()
 
 
 def _parse_jsoup(rule: str, content: str | Tag) -> str | list[str]:
@@ -174,8 +205,16 @@ def _select_jsoup_part(element: Tag | BeautifulSoup, part: str) -> list[Tag]:
     elif selector_type == "children":
         found = [c for c in element.children if isinstance(c, Tag)]
     else:
+        if _looks_like_css_selector(part):
+            try:
+                return element.select(part)
+            except Exception:
+                return []
         # Try as tag name directly
-        found = element.find_all(selector_type)
+        found = []
+        if isinstance(element, Tag) and element.name == selector_type:
+            found.append(element)
+        found.extend(element.find_all(selector_type))
         if not found and selector_value:
             # Try as CSS selector
             try:
@@ -191,3 +230,7 @@ def _select_jsoup_part(element: Tag | BeautifulSoup, part: str) -> list[Tag]:
         return []
 
     return found
+
+
+def _looks_like_css_selector(part: str) -> bool:
+    return any(token in part for token in (" ", ">", "+", "~", "[", "#", ":"))

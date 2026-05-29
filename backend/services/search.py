@@ -48,6 +48,12 @@ def _resolve_book_url_template(
     return _re.sub(r"\{\{(.+?)\}\}", replacer, template)
 
 
+def _first_str(value) -> str:
+    if isinstance(value, list):
+        return value[0] if value else ""
+    return value if isinstance(value, str) else ""
+
+
 async def search_books_stream(keyword: str, source_urls: list[str] | None = None):
     """Stream search results as each source completes."""
     sources_db = await list_sources(enabled_only=True)
@@ -185,39 +191,39 @@ async def _do_search(source: BookSourceSchema, keyword: str) -> list[SearchResul
         if not name:
             continue
 
-        author = parser.parse_element(rule_search.author, element, req["url"])
-        cover_url = parser.parse_element(rule_search.coverUrl, element, req["url"])
-        cover_url = make_absolute_url(cover_url if isinstance(cover_url, str) else "", req["url"])
-        intro = parser.parse_element(rule_search.intro, element, req["url"])
-        kind = parser.parse_element(rule_search.kind, element, req["url"])
-        last_chapter = parser.parse_element(rule_search.lastChapter, element, req["url"])
+        author = _first_str(parser.parse_element(rule_search.author, element, req["url"]))
+        cover_url = _first_str(parser.parse_element(rule_search.coverUrl, element, req["url"]))
+        cover_url = make_absolute_url(cover_url, req["url"])
+        intro = _first_str(parser.parse_element(rule_search.intro, element, req["url"]))
+        kind = _first_str(parser.parse_element(rule_search.kind, element, req["url"]))
+        last_chapter = _first_str(parser.parse_element(rule_search.lastChapter, element, req["url"]))
 
         if isinstance(name, list):
             name = name[0] if name else ""
 
         # Resolve bookUrl — may be a selector OR a template with {{book.field}}
         book_url_rule = rule_search.bookUrl
-        if "{{" in book_url_rule:
+        if "{{" in book_url_rule and "\n" not in book_url_rule:
             book_url = _resolve_book_url_template(book_url_rule, {
                 "name": name,
-                "author": author if isinstance(author, str) else "",
-                "kind": kind if isinstance(kind, str) else "",
-                "cover_url": cover_url if isinstance(cover_url, str) else "",
+                "author": author,
+                "kind": kind,
+                "cover_url": cover_url,
             }, element, parser, req["url"])
         else:
-            book_url = parser.parse_element(book_url_rule, element, req["url"])
-        book_url = make_absolute_url(book_url if isinstance(book_url, str) else "", req["url"])
+            book_url = _first_str(parser.parse_element(book_url_rule, element, req["url"]))
+        book_url = make_absolute_url(book_url, req["url"])
 
         results.append(SearchResultItem(
             name=name,
-            author=author if isinstance(author, str) else "",
-            cover_url=cover_url if isinstance(cover_url, str) else "",
-            intro=intro if isinstance(intro, str) else "",
+            author=author,
+            cover_url=cover_url,
+            intro=intro,
             book_url=book_url,
             source_url=source.bookSourceUrl,
             source_name=source.bookSourceName,
-            last_chapter=last_chapter if isinstance(last_chapter, str) else "",
-            kind=kind if isinstance(kind, str) else "",
+            last_chapter=last_chapter,
+            kind=kind,
         ))
 
     return results

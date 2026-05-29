@@ -20,6 +20,12 @@ class RuleParser:
 
         rule = rule.strip()
 
+        if self._is_multiline(rule) and not self._is_js_rule(rule):
+            return self._parse_multiline(rule, content, base_url)
+
+        if self._is_js_rule(rule):
+            return self._parse_single(rule, content, base_url)
+
         # Handle compound rules (&&, ||, %%)
         if is_compound(rule):
             return self._parse_compound(rule, content, base_url)
@@ -35,7 +41,7 @@ class RuleParser:
 
         if rule.startswith("@css:") or self._is_jsoup(rule):
             return css_parser.parse_list(rule, content)
-        elif rule.startswith("//") or rule.startswith("@xpath:"):
+        elif rule.startswith("//") or rule.startswith(".//") or rule.startswith("./") or rule.startswith("@xpath:"):
             xpath_rule = rule.removeprefix("@xpath:")
             return xpath_parser.parse_list(xpath_rule, content)
         elif rule.startswith("$.") or rule.startswith("@json:"):
@@ -50,6 +56,15 @@ class RuleParser:
 
         rule = rule.strip()
 
+        if self._is_multiline(rule) and not self._is_js_rule(rule):
+            return self._parse_multiline(rule, element, base_url)
+
+        if self._is_js_rule(rule):
+            return self._parse_single(rule, element, base_url)
+
+        if "{$" in rule:
+            return self._render_template(rule, element, base_url, "")
+
         if is_compound(rule):
             return self._parse_compound(rule, element, base_url)
 
@@ -61,6 +76,11 @@ class RuleParser:
                 if base_result:
                     return regex_parser.parse("##" + parts[1], base_result if isinstance(base_result, str) else str(base_result))
                 return ""
+            if "@js:" in rule and not rule.startswith("@js:"):
+                base_rule, js_rule = rule.split("@js:", 1)
+                base_result = self.parse_element(base_rule, element, base_url)
+                text = base_result if isinstance(base_result, str) else str(base_result or "")
+                return js_engine.execute("@js:" + js_rule, text, baseUrl=base_url)
             # JSON element — use jsonpath or direct key access
             if rule.startswith("$.") or rule.startswith("@json:"):
                 return jsonpath_parser.get_value(element, rule)
@@ -68,7 +88,7 @@ class RuleParser:
             return str(element.get(rule, ""))
 
         if isinstance(element, etree._Element):
-            if rule.startswith("//") or rule.startswith("@xpath:"):
+            if rule.startswith("//") or rule.startswith(".//") or rule.startswith("./") or rule.startswith("@xpath:"):
                 return xpath_parser.get_element_text(element, rule)
             text = etree.tostring(element, method="html", encoding="unicode")
             return self._parse_single(rule, text, base_url)
@@ -101,7 +121,7 @@ class RuleParser:
             return jsonpath_parser.parse(rule, content)
 
         # XPath
-        if rule.startswith("//") or rule.startswith("@xpath:"):
+        if rule.startswith("//") or rule.startswith(".//") or rule.startswith("./") or rule.startswith("@xpath:"):
             text = content if isinstance(content, str) else str(content)
             return xpath_parser.parse(rule, text)
 
@@ -152,6 +172,63 @@ class RuleParser:
             return template
 
         return ""
+
+    def _is_multiline(self, rule: str) -> bool:
+        return "\n" in rule and len([line for line in rule.splitlines() if line.strip()]) > 1
+
+    def _is_js_rule(self, rule: str) -> bool:
+        stripped = rule.strip()
+        return stripped.startswith("<js>") or stripped.startswith("@js:")
+
+    def _parse_multiline(self, rule: str, content, base_url: str) -> str:
+        """Parse a common Legado line pipeline.
+
+        Typical shape:
+            $.bid
+            <js>1100000000+parseInt(result)</js>
+            https://example.com/book?id={{result}}
+        """
+        parts = [line.strip() for line in rule.splitlines() if line.strip()]
+        result = ""
+        for index, part in enumerate(parts):
+            if "{{" in part and "}}" in part:
+                result = self._render_template(part, content, base_url, result)
+                continue
+
+            if index == 0:
+                parsed = self.parse_element(part, content, base_url)
+            elif part.startswith("<js>") or part.startswith("@js:") or part.startswith("##") or part.startswith("###"):
+                parsed = self._parse_single(part, result, base_url)
+            else:
+                parsed = self.parse_element(part, content, base_url)
+
+            if isinstance(parsed, list):
+                result = parsed[0] if parsed else ""
+            else:
+                result = parsed or ""
+        return result
+
+    def _render_template(self, template: str, content, base_url: str, result: str) -> str:
+        import re
+
+        def replace(match: re.Match) -> str:
+            expr = match.group(1).strip()
+            if expr == "result":
+                return result
+            parsed = self.parse_element(expr, content, base_url)
+            if isinstance(parsed, list):
+                return parsed[0] if parsed else ""
+            return parsed or ""
+
+        rendered = re.sub(r"\{\{(.+?)\}\}", replace, template)
+
+        def replace_dollar(match: re.Match) -> str:
+            parsed = self.parse_element("$" + match.group(1).strip(), content, base_url)
+            if isinstance(parsed, list):
+                return parsed[0] if parsed else ""
+            return parsed or ""
+
+        return re.sub(r"\{\$(.+?)\}", replace_dollar, rendered)
 
     def _is_jsoup(self, rule: str) -> bool:
         """Check if rule looks like JSOUP shorthand (class.x, tag.x, id.x, text.x)."""

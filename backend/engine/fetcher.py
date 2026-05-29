@@ -1,5 +1,6 @@
 import hashlib
 import json
+import asyncio
 from pathlib import Path
 
 import httpx
@@ -48,29 +49,25 @@ async def fetch(
         if path.exists():
             return path.read_text(encoding="utf-8")
 
-    client = _get_client()
-    from urllib.parse import urlparse
-    parsed = urlparse(url)
-    referer = f"{parsed.scheme}://{parsed.netloc}/"
-    merged_headers = {"User-Agent": settings.user_agent, "Referer": referer}
-    if headers:
-        merged_headers.update(headers)
-
-    if method.upper() == "POST":
-        content_type = merged_headers.get("Content-Type", "")
-        if "application/json" in content_type:
-            resp = await client.post(url, headers=merged_headers, content=body)
-        else:
-            resp = await client.post(url, headers=merged_headers, content=body)
-    else:
-        resp = await client.get(url, headers=merged_headers)
-
-    resp.raise_for_status()
+    merged_headers = _merge_headers(url, headers)
+    try:
+        resp = await _fetch_httpx(url, method=method, headers=merged_headers, body=body)
+        resp.raise_for_status()
+        content = resp.content
+        content_type = resp.headers.get("content-type", "")
+    except _fallback_exceptions() as first_error:
+        content, content_type = await _fetch_with_curl_cffi(
+            url,
+            method=method,
+            headers=merged_headers,
+            body=body,
+            first_error=first_error,
+        )
 
     if encoding:
-        text = resp.content.decode(encoding, errors="replace")
+        text = content.decode(encoding, errors="replace")
     else:
-        text = _detect_encoding(resp.content, resp.headers.get("content-type", ""))
+        text = _detect_encoding(content, content_type)
 
     if use_cache and len(text) > 50:
         key = _cache_key(url, method, body)
@@ -78,6 +75,87 @@ async def fetch(
         path.write_text(text, encoding="utf-8")
 
     return text
+
+
+def _merge_headers(url: str, headers: dict | None) -> dict:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    referer = f"{parsed.scheme}://{parsed.netloc}/"
+    merged_headers = {"User-Agent": settings.user_agent, "Referer": referer}
+    if headers:
+        merged_headers.update({str(key): str(value) for key, value in headers.items() if value is not None})
+    return merged_headers
+
+
+async def _fetch_httpx(url: str, *, method: str, headers: dict, body: str | None) -> httpx.Response:
+    client = _get_client()
+    if method.upper() == "POST":
+        return await client.post(url, headers=headers, content=body)
+    return await client.get(url, headers=headers)
+
+
+def _fallback_exceptions():
+    return (
+        httpx.ConnectError,
+        httpx.RemoteProtocolError,
+    )
+
+
+async def _fetch_with_curl_cffi(
+    url: str,
+    *,
+    method: str,
+    headers: dict,
+    body: str | None,
+    first_error: Exception,
+) -> tuple[bytes, str]:
+    try:
+        return await asyncio.to_thread(
+            _fetch_with_curl_cffi_sync,
+            url,
+            method,
+            headers,
+            body,
+            True,
+        )
+    except Exception:
+        if "CERTIFICATE_VERIFY_FAILED" not in str(first_error):
+            raise first_error
+        return await asyncio.to_thread(
+            _fetch_with_curl_cffi_sync,
+            url,
+            method,
+            headers,
+            body,
+            False,
+        )
+
+
+def _fetch_with_curl_cffi_sync(
+    url: str,
+    method: str,
+    headers: dict,
+    body: str | None,
+    verify: bool,
+) -> tuple[bytes, str]:
+    from curl_cffi import requests as cf_requests
+
+    request = cf_requests.post if method.upper() == "POST" else cf_requests.get
+    response = request(
+        url,
+        headers=headers,
+        data=body if method.upper() == "POST" else None,
+        impersonate="chrome120",
+        timeout=settings.request_timeout,
+        allow_redirects=True,
+        verify=verify,
+    )
+    response.raise_for_status()
+    content = response.content
+    if isinstance(content, str):
+        content = content.encode(response.encoding or "utf-8", errors="replace")
+    return content, response.headers.get("content-type", "")
 
 
 def _detect_encoding(content: bytes, content_type: str) -> str:
@@ -104,9 +182,12 @@ def parse_headers(header_str: str) -> dict:
     if not header_str:
         return {}
     try:
-        return json.loads(header_str)
+        headers = json.loads(header_str)
     except (json.JSONDecodeError, TypeError):
         return {}
+    if not isinstance(headers, dict):
+        return {}
+    return {str(key): str(value) for key, value in headers.items() if value is not None}
 
 
 async def close_client():

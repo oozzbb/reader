@@ -71,8 +71,16 @@ async def get_db() -> aiosqlite.Connection:
         await _db.execute("PRAGMA journal_mode=WAL")
         await _db.execute("PRAGMA foreign_keys=ON")
         await _db.executescript(SCHEMA)
+        await _migrate_db(_db)
         await _db.commit()
     return _db
+
+
+async def _migrate_db(db: aiosqlite.Connection):
+    cursor = await db.execute("PRAGMA table_info(book_sources)")
+    columns = {row["name"] for row in await cursor.fetchall()}
+    if "source_format" not in columns:
+        await db.execute("ALTER TABLE book_sources ADD COLUMN source_format TEXT DEFAULT 'legado'")
 
 
 async def close_db():
