@@ -143,6 +143,48 @@ async def test_get_chapters_scans_numbered_data_gdx_attributes(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_chapters_sorts_obfuscated_data_gdx_catalog(monkeypatch):
+    source = BookSourceSchema.model_validate(
+        {
+            "bookSourceUrl": "https://www.360lele.cc",
+            "bookSourceName": "乐乐小说",
+            "ruleBookInfo": {},
+            "ruleToc": {
+                "chapterList": "@css:ol li a",
+                "chapterName": "text",
+                "chapterUrl": "href",
+            },
+        }
+    )
+    html = """
+    <ol>
+      <li data-gdx7="24">
+        <a href="/book/32935/" class="g" data-gdx8="分卷阅读25"
+           data-gdx9="L2Jvb2svMzI5MzUvODM5MjMwLmh0bWw=">Chapter 01</a>
+      </li>
+      <li data-gdx7="0">
+        <a href="/book/32935/" class="g" data-gdx8="分卷阅读1"
+           data-gdx9="L2Jvb2svMzI5MzUvODM5MjA2Lmh0bWw=">Chapter 96</a>
+      </li>
+      <li data-gdx7="1">
+        <a href="/book/32935/" class="g" data-gdx8="分卷阅读2"
+           data-gdx9="L2Jvb2svMzI5MzUvODM5MjA3Lmh0bWw=">Chapter 54</a>
+      </li>
+    </ol>
+    """
+
+    monkeypatch.setattr("backend.services.content.get_source_raw", lambda source_url: _async_value(None))
+    monkeypatch.setattr("backend.services.content.get_source", lambda source_url: _async_value(source))
+    monkeypatch.setattr("backend.services.content.fetch", lambda url, **kwargs: _async_value(html))
+
+    chapters = await get_chapters("https://www.360lele.cc/book/32935/", "https://www.360lele.cc")
+
+    assert [chapter.title for chapter in chapters] == ["分卷阅读1", "分卷阅读2", "分卷阅读25"]
+    assert [chapter.idx for chapter in chapters] == [0, 1, 2]
+    assert chapters[0].url == "https://www.360lele.cc/book/32935/839206.html"
+
+
+@pytest.mark.asyncio
 async def test_get_chapter_content_parses_cleans_and_applies_replacement(monkeypatch):
     source = BookSourceSchema.model_validate(
         {

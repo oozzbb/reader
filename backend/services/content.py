@@ -58,6 +58,14 @@ def _element_attr(element, attr: str) -> str:
     return str(value or "")
 
 
+def _element_or_parent_attr(element, attr: str) -> str:
+    value = _element_attr(element, attr)
+    if value:
+        return value
+    parent = getattr(element, "parent", None)
+    return _element_attr(parent, attr) if parent is not None else ""
+
+
 def _data_gdx_values(element) -> list[str]:
     if not hasattr(element, "attrs"):
         return []
@@ -71,6 +79,17 @@ def _data_gdx_values(element) -> list[str]:
         elif value:
             values.append(str(value))
     return values
+
+
+def _sort_toc_elements(elements: list) -> list:
+    keyed = []
+    for index, element in enumerate(elements):
+        value = _element_or_parent_attr(element, "data-gdx7")
+        if not value.isdigit():
+            return elements
+        keyed.append((int(value), index, element))
+    keyed.sort(key=lambda item: (item[0], item[1]))
+    return [item[2] for item in keyed]
 
 
 def _looks_like_placeholder_chapter(title: str) -> bool:
@@ -209,7 +228,7 @@ async def get_chapters(book_url: str, source_url: str) -> list[ChapterSchema]:
     if not rule_toc.chapterList:
         return []
 
-    elements = parser.parse_list(rule_toc.chapterList, content, toc_url)
+    elements = _sort_toc_elements(parser.parse_list(rule_toc.chapterList, content, toc_url))
     if not elements:
         return []
 
@@ -257,7 +276,7 @@ async def _fetch_next_toc(
         if not content:
             break
 
-        elements = parser.parse_list(rule_toc.chapterList, content, url)
+        elements = _sort_toc_elements(parser.parse_list(rule_toc.chapterList, content, url))
         if not elements:
             break
 
