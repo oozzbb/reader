@@ -34,7 +34,10 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {},
+      workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+      },
     }),
   ],
   resolve: {
