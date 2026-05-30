@@ -2,31 +2,20 @@ import { create } from "zustand";
 import { SearchResult, Chapter } from "@/api/client";
 import { api } from "@/api/client";
 
-function scoreResult(item: SearchResult, keyword: string): number {
-  const kw = keyword.toLowerCase();
-  const name = (item.name || "").toLowerCase();
-  if (name === kw) return 3;
-  if (name.includes(kw)) return 2;
-  const author = (item.author || "").toLowerCase();
-  const intro = (item.intro || "").toLowerCase();
-  if (author.includes(kw) || intro.includes(kw)) return 1;
-  return 0;
+function resultKey(item: SearchResult): string {
+  return `${item.name}|${item.author}|${item.source_url}|${item.book_url}`.toLowerCase();
 }
 
-function dedupeAndSort(results: SearchResult[], keyword: string): SearchResult[] {
-  const scored = results.map((r) => ({ ...r, _score: scoreResult(r, keyword) }));
-  scored.sort((a, b) => b._score - a._score);
-
-  const seen = new Map<string, number>();
-  const deduped: SearchResult[] = [];
-  for (const item of scored) {
-    const key = `${item.name}|${item.author}`.toLowerCase();
-    const existing = seen.get(key);
-    if (existing !== undefined) continue;
-    seen.set(key, deduped.length);
-    deduped.push(item);
+function mergeStableResults(current: SearchResult[], incoming: SearchResult[]): SearchResult[] {
+  const seen = new Set(current.map(resultKey));
+  const merged = [...current];
+  for (const item of incoming) {
+    const key = resultKey(item);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
   }
-  return deduped;
+  return merged;
 }
 
 interface BookState {
@@ -39,7 +28,7 @@ interface BookState {
   loadChapters: (bookUrl: string, sourceUrl: string) => Promise<void>;
 }
 
-export const useBookStore = create<BookState>((set) => ({
+export const useBookStore = create<BookState>((set, get) => ({
   searchResults: [],
   searchKeyword: "",
   chapters: [],
@@ -47,6 +36,11 @@ export const useBookStore = create<BookState>((set) => ({
   error: "",
 
   search: async (keyword: string) => {
+    const current = get();
+    if (current.searchKeyword === keyword && (current.loading || current.searchResults.length > 0)) {
+      return;
+    }
+
     set({ searchResults: [], searchKeyword: keyword, loading: true, error: "" });
 
     try {
@@ -59,7 +53,6 @@ export const useBookStore = create<BookState>((set) => ({
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let allResults: SearchResult[] = [];
 
       while (true) {
         const { done, value } = await reader.read();
@@ -76,17 +69,24 @@ export const useBookStore = create<BookState>((set) => ({
 
           try {
             const batch: SearchResult[] = JSON.parse(payload);
-            allResults = [...allResults, ...batch];
-            set({ searchResults: dedupeAndSort(allResults, keyword) });
+            set((state) => ({
+              searchResults: state.searchKeyword === keyword
+                ? mergeStableResults(state.searchResults, batch)
+                : state.searchResults,
+            }));
           } catch {
             // skip malformed lines
           }
         }
       }
     } catch (e) {
-      set({ error: String(e) });
+      if (get().searchKeyword === keyword) {
+        set({ error: String(e) });
+      }
     } finally {
-      set({ loading: false });
+      if (get().searchKeyword === keyword) {
+        set({ loading: false });
+      }
     }
   },
 
