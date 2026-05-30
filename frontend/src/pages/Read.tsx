@@ -44,6 +44,8 @@ export default function Read() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loadedChapters, setLoadedChapters] = useState<LoadedChapter[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [retryNonce, setRetryNonce] = useState(0);
   const [currentViewIdx, setCurrentViewIdx] = useState(startIdx);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const chapterRefs = useRef<Map<number, HTMLElement>>(new Map());
@@ -85,6 +87,7 @@ export default function Read() {
     if (bookUrl && shouldResolveChapterUrl(chapterUrl, bookUrl, title) && chapters.length === 0) return;
 
     setLoading(true);
+    setLoadError("");
     setLoadedChapters([]);
 
     const cacheKey = `ch:${chapterUrl}`;
@@ -101,6 +104,7 @@ export default function Read() {
     };
 
     const handleResponse = (res: ChapterContent) => {
+      setLoadError("");
       if (res.type === "manga") {
         setContentType("manga");
         setMangaImages(res.images);
@@ -117,6 +121,13 @@ export default function Read() {
       }
     };
 
+    const handleFailure = (cached?: string) => {
+      if (!cached) {
+        setLoading(false);
+        setLoadError("章节加载失败");
+      }
+    };
+
     idbGet(cacheKey).then((cached: string | undefined) => {
       if (cached) {
         setContentType("novel");
@@ -127,11 +138,11 @@ export default function Read() {
       }
       api.getChapterContent(chapterUrl, sourceUrl).then((res) => {
         handleResponse(res);
-      }).catch(() => { if (!cached) setLoading(false); });
+      }).catch(() => handleFailure(cached));
     }).catch(() => {
-      api.getChapterContent(chapterUrl, sourceUrl).then(handleResponse).catch(() => setLoading(false));
+      api.getChapterContent(chapterUrl, sourceUrl).then(handleResponse).catch(() => handleFailure());
     });
-  }, [chapterUrl, sourceUrl, title, startIdx]);
+  }, [chapterUrl, sourceUrl, title, startIdx, retryNonce]);
 
   // Auto-load next chapter on scroll to bottom
   useEffect(() => {
@@ -389,6 +400,21 @@ export default function Read() {
 
           {loading && (
             <p className="text-center opacity-40 py-6 text-[13px]">加载中...</p>
+          )}
+
+          {!loading && loadError && loadedChapters.length === 0 && (
+            <div className="text-center py-12">
+              <p className="opacity-40 text-[13px] mb-3">{loadError}</p>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRetryNonce((v) => v + 1);
+                }}
+                className="px-4 py-2 rounded-lg bg-black/[0.06] text-[13px] active:bg-black/[0.1]"
+              >
+                重试
+              </button>
+            </div>
           )}
 
           {hasNext && !loading && (

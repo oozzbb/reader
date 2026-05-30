@@ -1,14 +1,26 @@
 const BASE = "/api";
+const REQUEST_TIMEOUT_MS = 45000;
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
-  if (!res.ok) {
-    throw new Error(`API error: ${res.status}`);
+  const controller = options?.signal ? null : new AbortController();
+  const timeout = controller
+    ? window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+    : undefined;
+
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+      ...options,
+      signal: options?.signal ?? controller?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`API error: ${res.status}`);
+    }
+    return res.json();
+  } finally {
+    if (timeout) window.clearTimeout(timeout);
   }
-  return res.json();
 }
 
 export interface SearchResult {
