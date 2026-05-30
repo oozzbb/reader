@@ -58,6 +58,33 @@ def _sync_http_post(url: str, body: str = "", headers_json: str = "{}") -> str:
         return ""
 
 
+def _aes_base64_decode_to_string(ciphertext: str, key: str, transformation: str = "", iv: str = "") -> str:
+    """Decode common Legado Java AES helper calls."""
+    if not isinstance(ciphertext, str) or not isinstance(key, str):
+        return ""
+    try:
+        from Crypto.Cipher import AES
+
+        raw = base64.b64decode(ciphertext)
+        mode_name = (transformation or "").upper()
+        if "CBC" in mode_name:
+            cipher = AES.new(key.encode("utf-8"), AES.MODE_CBC, (iv or "").encode("utf-8"))
+        elif "ECB" in mode_name:
+            cipher = AES.new(key.encode("utf-8"), AES.MODE_ECB)
+        else:
+            cipher = AES.new(key.encode("utf-8"), AES.MODE_CBC, (iv or "").encode("utf-8"))
+
+        decrypted = cipher.decrypt(raw)
+        if decrypted:
+            padding = decrypted[-1]
+            if 0 < padding <= AES.block_size and decrypted.endswith(bytes([padding]) * padding):
+                decrypted = decrypted[:-padding]
+        return decrypted.decode("utf-8", errors="ignore")
+    except Exception as e:
+        logger.debug(f"JS AES decode failed: {e}")
+        return ""
+
+
 class JSEngine:
     """QuickJS engine for Legado @js: snippets."""
 
@@ -85,6 +112,9 @@ class JSEngine:
             base64Encode: function(str) { return __base64Encode(str); },
             base64Decode: function(str) { return __base64Decode(str); },
             md5Encode: function(str) { return __md5Encode(str); },
+            aesBase64DecodeToString: function(str, key, transformation, iv) {
+                return __aesBase64DecodeToString(str, key || "", transformation || "", iv || "");
+            },
             log: function(msg) { __log(String(msg)); },
             put: function(key, value) {},
         };
@@ -96,6 +126,7 @@ class JSEngine:
         ctx.add_callable("__base64Encode", lambda s: base64.b64encode(s.encode()).decode() if isinstance(s, str) else "")
         ctx.add_callable("__base64Decode", lambda s: base64.b64decode(s).decode() if isinstance(s, str) else "")
         ctx.add_callable("__md5Encode", lambda s: hashlib.md5(s.encode()).hexdigest() if isinstance(s, str) else "")
+        ctx.add_callable("__aesBase64DecodeToString", _aes_base64_decode_to_string)
         ctx.add_callable("__log", lambda msg: logger.debug(f"JS: {msg}"))
 
     def execute(self, script: str, result: str = "", **variables) -> str:

@@ -75,6 +75,74 @@ async def test_get_chapters_uses_toc_url_template_and_fetches_toc_page(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_get_chapters_uses_data_gdx_fallback_for_placeholder_titles(monkeypatch):
+    source = BookSourceSchema.model_validate(
+        {
+            "bookSourceUrl": "https://www.360lele.cc",
+            "bookSourceName": "乐乐小说",
+            "ruleBookInfo": {},
+            "ruleToc": {
+                "chapterList": "@css:ol li a",
+                "chapterName": "text",
+                "chapterUrl": "href",
+            },
+        }
+    )
+    html = """
+    <ol>
+      <li>
+        <a href="/book/46690/" class="g" data-gdx3="分卷阅读1"
+           data-gdx1="L2Jvb2svNDY2OTAvOTI1MTE4Lmh0bWw=">Chapter 01</a>
+      </li>
+    </ol>
+    """
+
+    monkeypatch.setattr("backend.services.content.get_source_raw", lambda source_url: _async_value(None))
+    monkeypatch.setattr("backend.services.content.get_source", lambda source_url: _async_value(source))
+    monkeypatch.setattr("backend.services.content.fetch", lambda url, **kwargs: _async_value(html))
+
+    chapters = await get_chapters("https://www.360lele.cc/book/46690/", "https://www.360lele.cc")
+
+    assert len(chapters) == 1
+    assert chapters[0].title == "分卷阅读1"
+    assert chapters[0].url == "https://www.360lele.cc/book/46690/925118.html"
+
+
+@pytest.mark.asyncio
+async def test_get_chapters_scans_numbered_data_gdx_attributes(monkeypatch):
+    source = BookSourceSchema.model_validate(
+        {
+            "bookSourceUrl": "https://www.360lele.cc",
+            "bookSourceName": "乐乐小说",
+            "ruleBookInfo": {},
+            "ruleToc": {
+                "chapterList": "@css:ol li a",
+                "chapterName": "text",
+                "chapterUrl": "href",
+            },
+        }
+    )
+    html = """
+    <ol>
+      <li>
+        <a href="/book/32935/" class="g" data-gdx8="分卷阅读25"
+           data-gdx9="L2Jvb2svMzI5MzUvODM5MjMwLmh0bWw=">Chapter 01</a>
+      </li>
+    </ol>
+    """
+
+    monkeypatch.setattr("backend.services.content.get_source_raw", lambda source_url: _async_value(None))
+    monkeypatch.setattr("backend.services.content.get_source", lambda source_url: _async_value(source))
+    monkeypatch.setattr("backend.services.content.fetch", lambda url, **kwargs: _async_value(html))
+
+    chapters = await get_chapters("https://www.360lele.cc/book/32935/", "https://www.360lele.cc")
+
+    assert len(chapters) == 1
+    assert chapters[0].title == "分卷阅读25"
+    assert chapters[0].url == "https://www.360lele.cc/book/32935/839230.html"
+
+
+@pytest.mark.asyncio
 async def test_get_chapter_content_parses_cleans_and_applies_replacement(monkeypatch):
     source = BookSourceSchema.model_validate(
         {

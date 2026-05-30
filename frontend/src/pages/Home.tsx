@@ -24,6 +24,8 @@ const PERIODS = [
   { key: "all", label: "总排行" },
 ];
 
+const CONTINUE_LIMIT = 8;
+
 export default function Home() {
   const [keyword, setKeyword] = useState("");
   const [progress, setProgress] = useState<ProgressItem[]>([]);
@@ -86,7 +88,7 @@ export default function Home() {
                 继续阅读
               </h2>
               <div className="space-y-2">
-                {progress.slice(0, 3).map((item) => (
+                {progress.slice(0, CONTINUE_LIMIT).map((item) => (
                   <button
                     key={item.book_url}
                     onClick={() => handleContinue(item)}

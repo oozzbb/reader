@@ -304,6 +304,9 @@ export default function Read() {
           <button onClick={() => navigate(-1)} className="text-[13px] mr-4">
             ← 返回
           </button>
+          <button onClick={() => navigate("/")} className="text-[13px] mr-4">
+            首页
+          </button>
           <span className="text-[13px] truncate flex-1">
             {chapters.find((ch) => ch.idx === currentViewIdx)?.title || title}
           </span>

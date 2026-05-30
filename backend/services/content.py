@@ -1,5 +1,6 @@
 """Content service — fetch book info, chapter list, and chapter content."""
 
+import base64
 import json
 import logging
 import re as _re
@@ -42,6 +43,91 @@ def _resolve_template(template: str, fields: dict[str, str]) -> str:
             return fields.get(expr[5:], "")
         return ""
     return _re.sub(r"\{\{(.+?)\}\}", replacer, template)
+
+
+def _element_attr(element, attr: str) -> str:
+    """Read an attribute from BeautifulSoup/lxml-like elements."""
+    if not hasattr(element, "get"):
+        return ""
+    try:
+        value = element.get(attr, "")
+    except TypeError:
+        value = element.get(attr)
+    if isinstance(value, list):
+        return " ".join(str(v) for v in value)
+    return str(value or "")
+
+
+def _data_gdx_values(element) -> list[str]:
+    if not hasattr(element, "attrs"):
+        return []
+    attrs = getattr(element, "attrs", {}) or {}
+    values = []
+    for key, value in attrs.items():
+        if not str(key).startswith("data-gdx"):
+            continue
+        if isinstance(value, list):
+            values.extend(str(v) for v in value if v)
+        elif value:
+            values.append(str(value))
+    return values
+
+
+def _looks_like_placeholder_chapter(title: str) -> bool:
+    return bool(_re.fullmatch(r"chapter\s*\d+", (title or "").strip(), flags=_re.IGNORECASE))
+
+
+def _decode_base64_url(value: str) -> str:
+    if not value:
+        return ""
+    try:
+        padded = value + "=" * (-len(value) % 4)
+        return base64.b64decode(padded).decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+def _find_data_gdx_title(element) -> str:
+    for value in _data_gdx_values(element):
+        decoded = _decode_base64_url(value)
+        if decoded.startswith(("/", "http://", "https://")):
+            continue
+        if value and not _looks_like_placeholder_chapter(value):
+            return value.strip()
+    return ""
+
+
+def _find_data_gdx_url(element) -> str:
+    for value in _data_gdx_values(element):
+        decoded = _decode_base64_url(value)
+        if decoded.startswith(("/", "http://", "https://")):
+            return decoded
+    return ""
+
+
+def _normalize_chapter_entry(title, url, element, base_url: str) -> tuple[str, str]:
+    """Apply source-agnostic fallbacks for obfuscated chapter anchors."""
+    if isinstance(title, list):
+        title = title[0] if title else ""
+    if not isinstance(title, str):
+        title = str(title or "")
+    if not isinstance(url, str):
+        url = ""
+
+    original_title_is_placeholder = _looks_like_placeholder_chapter(title)
+    fallback_title = _element_attr(element, "data-gdx3") or _find_data_gdx_title(element)
+    if fallback_title and (not title or original_title_is_placeholder):
+        title = fallback_title
+
+    absolute_url = make_absolute_url(url, base_url)
+    encoded_url = _element_attr(element, "data-gdx1")
+    decoded_url = _decode_base64_url(encoded_url) or _find_data_gdx_url(element)
+    if decoded_url:
+        decoded_absolute_url = make_absolute_url(decoded_url, base_url)
+        if encoded_url or not absolute_url or absolute_url.rstrip("/") == base_url.rstrip("/") or original_title_is_placeholder:
+            absolute_url = decoded_absolute_url
+
+    return title.strip(), absolute_url
 
 
 async def get_book_info(book_url: str, source_url: str) -> BookSchema | None:
@@ -131,10 +217,7 @@ async def get_chapters(book_url: str, source_url: str) -> list[ChapterSchema]:
     for idx, element in enumerate(elements):
         title = parser.parse_element(rule_toc.chapterName, element, toc_url)
         url = parser.parse_element(rule_toc.chapterUrl, element, toc_url)
-        url = make_absolute_url(url if isinstance(url, str) else "", toc_url)
-
-        if isinstance(title, list):
-            title = title[0] if title else ""
+        title, url = _normalize_chapter_entry(title, url, element, toc_url)
 
         if not title:
             continue
@@ -181,10 +264,7 @@ async def _fetch_next_toc(
         for element in elements:
             title = parser.parse_element(rule_toc.chapterName, element, url)
             ch_url = parser.parse_element(rule_toc.chapterUrl, element, url)
-            ch_url = make_absolute_url(ch_url if isinstance(ch_url, str) else "", url)
-
-            if isinstance(title, list):
-                title = title[0] if title else ""
+            title, ch_url = _normalize_chapter_entry(title, ch_url, element, url)
             if not title:
                 continue
 

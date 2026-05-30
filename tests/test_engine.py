@@ -1,4 +1,6 @@
 import json
+import base64
+import hashlib
 
 from backend.engine import css_parser, jsonpath_parser, regex_parser, xpath_parser
 from backend.engine.fetcher import parse_headers
@@ -257,6 +259,28 @@ def test_js_engine_executes_snippets_with_variables_and_helpers():
     assert execute_js("@js: result + '-' + baseUrl", "正文", baseUrl="https://example.com") == "正文-https://example.com"
     assert execute_js("<js>java.base64Decode(java.base64Encode('测试'))</js>") == "测试"
     assert execute_js("@js: java.md5Encode('abc')") == "900150983cd24fb0d6963f7d28e17f72"
+
+
+def test_js_engine_supports_aes_base64_decode_helper():
+    from Crypto.Cipher import AES
+
+    reset_js()
+    plaintext = "第一段正文\n第二段正文"
+    digest = hashlib.md5("secret".encode()).hexdigest()
+    iv = digest[:16]
+    key = digest[16:]
+    payload = plaintext.encode()
+    pad_len = AES.block_size - len(payload) % AES.block_size
+    payload += bytes([pad_len]) * pad_len
+    encrypted = AES.new(key.encode(), AES.MODE_CBC, iv.encode()).encrypt(payload)
+    encoded = base64.b64encode(encrypted).decode()
+
+    assert execute_js(
+        "@js: java.aesBase64DecodeToString(result, key, 'AES/CBC/PKCS5padding', baseUrl)",
+        encoded,
+        key=key,
+        baseUrl=iv,
+    ) == plaintext
 
 
 def test_rule_parser_executes_legado_js_snippets_for_json_and_variables():
