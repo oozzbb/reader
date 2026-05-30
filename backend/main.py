@@ -60,5 +60,10 @@ if static_dir.exists():
         # Serve static file if it exists, otherwise return index.html for SPA routing
         file_path = static_dir / path
         if path and file_path.exists() and file_path.is_file():
-            return FileResponse(file_path)
-        return FileResponse(static_dir / "index.html")
+            response = FileResponse(file_path)
+        else:
+            response = FileResponse(static_dir / "index.html")
+        if path in ("", "index.html", "reader-sw.js", "sw.js", "registerSW.js", "manifest.webmanifest"):
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Pragma"] = "no-cache"
+        return response

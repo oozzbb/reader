@@ -8,6 +8,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: "inline",
+      filename: "reader-sw.js",
       manifest: {
         name: "Reader",
         short_name: "Reader",
