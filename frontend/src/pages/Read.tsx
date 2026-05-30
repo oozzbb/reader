@@ -13,6 +13,19 @@ interface LoadedChapter {
   idx: number;
 }
 
+function normalizeUrl(url: string) {
+  return url.replace(/\/+$/, "");
+}
+
+function isPlaceholderChapter(title: string) {
+  return /^chapter\s*\d+$/i.test(title.trim());
+}
+
+function shouldResolveChapterUrl(chapterUrl: string, bookUrl: string, title: string) {
+  if (!chapterUrl) return false;
+  return normalizeUrl(chapterUrl) === normalizeUrl(bookUrl) || isPlaceholderChapter(title);
+}
+
 export default function Read() {
   const [params, setParams] = useSearchParams();
   const chapterUrl = params.get("url") || "";
@@ -46,9 +59,31 @@ export default function Read() {
     api.getChapters(bookUrl, sourceUrl).then(setChapters).catch(() => {});
   }, [bookUrl, sourceUrl]);
 
+  // Repair stale read URLs saved before TOC obfuscation fallbacks existed.
+  useEffect(() => {
+    if (!bookUrl || !sourceUrl || chapters.length === 0) return;
+    if (!shouldResolveChapterUrl(chapterUrl, bookUrl, title)) return;
+
+    const resolved = chapters.find((ch) => ch.idx === startIdx) || chapters[0];
+    if (!resolved || resolved.url === chapterUrl && resolved.title === title) return;
+
+    const nextParams: Record<string, string> = {
+      url: resolved.url,
+      source_url: sourceUrl,
+      title: resolved.title,
+      idx: String(resolved.idx),
+      book_url: bookUrl,
+      book_name: bookName,
+    };
+    if (params.get("scroll")) nextParams.scroll = params.get("scroll") || "";
+    setParams(nextParams, { replace: true });
+  }, [bookUrl, sourceUrl, chapters, chapterUrl, title, startIdx, bookName, params, setParams]);
+
   // Load initial chapter with IndexedDB cache
   useEffect(() => {
     if (!chapterUrl || !sourceUrl) return;
+    if (bookUrl && shouldResolveChapterUrl(chapterUrl, bookUrl, title) && chapters.length === 0) return;
+
     setLoading(true);
     setLoadedChapters([]);
 
