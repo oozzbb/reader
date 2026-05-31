@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ProgressItem } from "@/api/client";
+import { clear as idbClear } from "idb-keyval";
 
 interface RankItem {
   name: string;
@@ -33,10 +34,13 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState("xuanhuan");
   const [activePeriod, setActivePeriod] = useState("week");
   const [rankLoading, setRankLoading] = useState(false);
+  const [version, setVersion] = useState("");
+  const [maintenanceStatus, setMaintenanceStatus] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
     api.getProgressList().then(setProgress).catch(() => {});
+    api.getVersion().then((data) => setVersion(data.version.slice(0, 7))).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -58,6 +62,33 @@ export default function Home() {
 
   const handleRankClick = (item: RankItem) => {
     navigate(`/book?book_url=${encodeURIComponent(item.book_url)}&source_url=${encodeURIComponent(item.source_url)}`);
+  };
+
+  const clearReadingCache = async () => {
+    setMaintenanceStatus("清理中...");
+    try {
+      await idbClear();
+      setMaintenanceStatus("阅读缓存已清理");
+    } catch {
+      setMaintenanceStatus("清理失败");
+    }
+  };
+
+  const resetAppCache = async () => {
+    setMaintenanceStatus("重置中...");
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((key) => caches.delete(key)));
+      }
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((registration) => registration.unregister()));
+      }
+      window.location.reload();
+    } catch {
+      setMaintenanceStatus("重置失败");
+    }
   };
 
   return (
@@ -196,6 +227,32 @@ export default function Home() {
           </div>
         </section>
       </div>
+
+      <section className="mt-10 pt-5 border-t border-black/[0.04]">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-[13px] font-semibold text-[#86868b] uppercase tracking-wider">
+            维护
+          </h2>
+          {version && <span className="text-[11px] text-[#c7c7cc] tabular-nums">{version}</span>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={clearReadingCache}
+            className="px-3 py-2 rounded-lg bg-black/[0.04] text-[12px] text-[#1d1d1f] active:bg-black/[0.08]"
+          >
+            清阅读缓存
+          </button>
+          <button
+            onClick={resetAppCache}
+            className="px-3 py-2 rounded-lg bg-black/[0.04] text-[12px] text-[#1d1d1f] active:bg-black/[0.08]"
+          >
+            重置应用缓存
+          </button>
+          {maintenanceStatus && (
+            <span className="self-center text-[12px] text-[#86868b]">{maintenanceStatus}</span>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

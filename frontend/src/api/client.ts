@@ -59,6 +59,8 @@ export interface SourceItem {
 }
 
 export const api = {
+  getVersion: () => request<{ version: string }>("/version"),
+
   search: (keyword: string) =>
     request<SearchResult[]>(`/search?keyword=${encodeURIComponent(keyword)}`),
 
