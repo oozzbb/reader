@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { api, BookInfo, Chapter } from "@/api/client";
+import { useDownload } from "@/hooks/useDownload";
 
 export default function BookDetail() {
   const [params] = useSearchParams();
@@ -12,6 +13,8 @@ export default function BookDetail() {
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [loading, setLoading] = useState(true);
   const [added, setAdded] = useState(false);
+
+  const { state: dlState, start: startDownload, cancel: cancelDownload, exportTxt, isDownloaded } = useDownload(bookUrl, sourceUrl);
 
   useEffect(() => {
     if (!bookUrl || !sourceUrl) return;
@@ -69,7 +72,7 @@ export default function BookDetail() {
               {info.intro}
             </p>
           )}
-          <div className="flex items-center gap-4 mt-5">
+          <div className="flex items-center flex-wrap gap-3 mt-5">
             <button
               onClick={handleAddToShelf}
               disabled={added}
@@ -81,6 +84,49 @@ export default function BookDetail() {
             >
               {added ? "已加入" : "加入书架"}
             </button>
+
+            {/* Download button */}
+            {dlState.status === "idle" && !isDownloaded && (
+              <button
+                onClick={startDownload}
+                className="px-4 py-2 rounded-lg text-[13px] font-medium bg-black/[0.05] text-[#1d1d1f] hover:bg-black/[0.08] active:scale-[0.96] transition-all"
+              >
+                下载全本
+              </button>
+            )}
+
+            {dlState.status === "downloading" && (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-[#86868b]">
+                  {dlState.downloaded}/{dlState.total}
+                </span>
+                <div className="w-24 h-1.5 rounded-full bg-black/[0.06] overflow-hidden">
+                  <div
+                    className="h-full bg-[#c45d35] rounded-full transition-all"
+                    style={{ width: `${dlState.total ? (dlState.downloaded / dlState.total) * 100 : 0}%` }}
+                  />
+                </div>
+                <button
+                  onClick={cancelDownload}
+                  className="text-[11px] text-[#86868b] hover:text-[#1d1d1f]"
+                >
+                  取消
+                </button>
+              </div>
+            )}
+
+            {(dlState.status === "done" || isDownloaded) && (
+              <div className="flex items-center gap-2">
+                <span className="text-[12px] text-[#34c759]">已缓存</span>
+                <button
+                  onClick={() => exportTxt(info.name, chapters)}
+                  className="text-[12px] text-[#86868b] hover:text-[#c45d35] transition-colors"
+                >
+                  导出 TXT
+                </button>
+              </div>
+            )}
+
             <span className="text-[12px] text-[#c7c7cc]">{chapters.length} 章</span>
           </div>
         </div>
