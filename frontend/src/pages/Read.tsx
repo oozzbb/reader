@@ -5,6 +5,7 @@ import { useReaderStore } from "@/stores/readerStore";
 import ReaderSettings from "@/components/reader/ReaderSettings";
 import MangaScroll from "@/components/reader/MangaScroll";
 import MangaPage from "@/components/reader/MangaPage";
+import { useDownload } from "@/hooks/useDownload";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 
 interface LoadedChapter {
@@ -38,6 +39,7 @@ export default function Read() {
   const navigate = useNavigate();
 
   const { settings } = useReaderStore();
+  const { state: dlState, start: startDownload, isDownloaded } = useDownload(bookUrl, sourceUrl);
   const [showToolbar, setShowToolbar] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showToc, setShowToc] = useState(false);
@@ -363,6 +365,19 @@ export default function Read() {
             >
               {mangaMode === "scroll" ? "页模式" : "条模式"}
             </button>
+          )}
+          {!isDownloaded && dlState.status === "idle" && (
+            <button onClick={startDownload} className="text-[13px] ml-2">
+              下载
+            </button>
+          )}
+          {dlState.status === "downloading" && (
+            <span className="text-[11px] ml-2 text-white/70">
+              {dlState.downloaded}/{dlState.total}
+            </span>
+          )}
+          {isDownloaded && (
+            <span className="text-[11px] ml-2 text-[#34c759]">离线</span>
           )}
           <button onClick={() => setShowSettings(true)} className="text-[13px] ml-2">
             设置

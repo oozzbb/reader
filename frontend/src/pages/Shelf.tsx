@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
-import { get as idbGet } from "idb-keyval";
+import { get as idbGet, set as idbSet } from "idb-keyval";
 
 interface BookItem {
   id: number;
@@ -36,6 +36,46 @@ export default function Shelf() {
     };
     checkDownloads();
   }, [books]);
+
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [dlProgress, setDlProgress] = useState({ done: 0, total: 0 });
+
+  const handleDownload = async (book: BookItem, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (downloading || downloadedSet.has(book.book_url)) return;
+    setDownloading(book.book_url);
+
+    try {
+      const chapters = await api.getChapters(book.book_url, book.source_url);
+      setDlProgress({ done: 0, total: chapters.length });
+      let done = 0;
+
+      const concurrency = 3;
+      let idx = 0;
+      const fetchOne = async () => {
+        while (idx < chapters.length) {
+          const i = idx++;
+          const ch = chapters[i];
+          if (!ch.url) continue;
+          const cached = await idbGet(`ch:${ch.url}`).catch(() => null);
+          if (!cached) {
+            try {
+              const res = await api.getChapterContent(ch.url, book.source_url);
+              const content = res.type === "novel" ? res.content : JSON.stringify(res.images);
+              await idbSet(`ch:${ch.url}`, content);
+            } catch {}
+          }
+          done++;
+          setDlProgress({ done, total: chapters.length });
+        }
+      };
+
+      await Promise.all(Array.from({ length: concurrency }, () => fetchOne()));
+      await idbSet(`dl:${book.book_url}`, { status: "done", total: chapters.length, downloaded: done });
+      setDownloadedSet((s) => new Set(s).add(book.book_url));
+    } catch {}
+    setDownloading(null);
+  };
 
   const handleClick = async (book: BookItem) => {
     try {
@@ -75,9 +115,20 @@ export default function Shelf() {
           >
             <div className="flex items-center gap-2">
               <p className="text-[15px] font-medium text-[#1d1d1f] truncate flex-1">{book.name}</p>
-              {downloadedSet.has(book.book_url) && (
+              {downloadedSet.has(book.book_url) ? (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#34c759]/10 text-[#34c759] font-medium flex-shrink-0">
                   离线
+                </span>
+              ) : downloading === book.book_url ? (
+                <span className="text-[10px] text-[#86868b] flex-shrink-0">
+                  {dlProgress.done}/{dlProgress.total}
+                </span>
+              ) : (
+                <span
+                  onClick={(e) => handleDownload(book, e)}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-black/[0.04] text-[#86868b] font-medium flex-shrink-0 hover:text-[#c45d35] active:bg-black/[0.08]"
+                >
+                  下载
                 </span>
               )}
             </div>
