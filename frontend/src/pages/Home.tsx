@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ProgressItem } from "@/api/client";
 import { clear as idbClear } from "idb-keyval";
+import { getLocalProgressList, mergeProgress } from "@/utils/progressCache";
 
 interface RankItem {
   name: string;
@@ -39,7 +40,11 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.getProgressList().then(setProgress).catch(() => {});
+    const localProgress = getLocalProgressList();
+    if (localProgress.length) setProgress(localProgress);
+    api.getProgressList()
+      .then((items) => setProgress(mergeProgress(items, getLocalProgressList())))
+      .catch(() => {});
     api.getVersion().then((data) => setVersion(data.version.slice(0, 7))).catch(() => {});
   }, []);
 
@@ -57,7 +62,7 @@ export default function Home() {
   };
 
   const handleContinue = (item: ProgressItem) => {
-    navigate(`/read?url=${encodeURIComponent(item.chapter_url)}&source_url=${encodeURIComponent(item.source_url)}&title=${encodeURIComponent(item.chapter_title)}&idx=${item.chapter_idx}&book_url=${encodeURIComponent(item.book_url)}&book_name=${encodeURIComponent(item.book_name)}`);
+    navigate(`/read?url=${encodeURIComponent(item.chapter_url)}&source_url=${encodeURIComponent(item.source_url)}&title=${encodeURIComponent(item.chapter_title)}&idx=${item.chapter_idx}&book_url=${encodeURIComponent(item.book_url)}&book_name=${encodeURIComponent(item.book_name)}&scroll=${item.scroll_percent || 0}`);
   };
 
   const handleRankClick = (item: RankItem) => {

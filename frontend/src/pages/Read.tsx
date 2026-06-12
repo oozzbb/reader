@@ -7,6 +7,7 @@ import MangaScroll from "@/components/reader/MangaScroll";
 import MangaPage from "@/components/reader/MangaPage";
 import { useDownload } from "@/hooks/useDownload";
 import { get as idbGet, set as idbSet } from "idb-keyval";
+import { saveLocalProgress } from "@/utils/progressCache";
 
 interface LoadedChapter {
   title: string;
@@ -190,7 +191,7 @@ export default function Read() {
       const scrollPercent = document.documentElement.scrollHeight > window.innerHeight
         ? window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)
         : 0;
-      api.saveProgress({
+      const progress = {
         book_url: bookUrl,
         source_url: sourceUrl,
         book_name: bookName || title,
@@ -198,7 +199,9 @@ export default function Read() {
         chapter_title: ch.title,
         chapter_url: ch.url,
         scroll_percent: Math.round(scrollPercent * 1000) / 1000,
-      }).catch(() => {});
+      };
+      saveLocalProgress(progress);
+      api.saveProgress(progress).catch(() => {});
     };
 
     // Save on chapter change (debounced)
@@ -211,11 +214,19 @@ export default function Read() {
       scrollSaveRef.current = setTimeout(saveNow, 2000);
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("pagehide", saveNow);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") saveNow();
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
 
     return () => {
+      saveNow();
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
       if (scrollSaveRef.current) clearTimeout(scrollSaveRef.current);
       window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pagehide", saveNow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [currentViewIdx, bookUrl, sourceUrl, chapters, bookName, title]);
 
