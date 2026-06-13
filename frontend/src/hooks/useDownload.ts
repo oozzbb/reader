@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { api, Chapter } from "@/api/client";
+import { saveChapterList } from "@/utils/chapterCache";
 
 export interface DownloadState {
   status: "idle" | "downloading" | "done" | "error";
@@ -54,6 +55,7 @@ export function useDownload(bookUrl: string, sourceUrl: string) {
 
     const total = chapters.length;
     setState((s) => ({ ...s, total }));
+    saveChapterList(bookUrl, sourceUrl, chapters).catch(() => {});
 
     let downloaded = 0;
     let failed = 0;

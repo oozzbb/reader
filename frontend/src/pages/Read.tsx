@@ -8,6 +8,7 @@ import MangaPage from "@/components/reader/MangaPage";
 import { useDownload } from "@/hooks/useDownload";
 import { get as idbGet, set as idbSet } from "idb-keyval";
 import { saveLocalProgress } from "@/utils/progressCache";
+import { getCachedChapterList, saveChapterList } from "@/utils/chapterCache";
 
 interface LoadedChapter {
   title: string;
@@ -61,7 +62,19 @@ export default function Read() {
   // Load chapter list
   useEffect(() => {
     if (!bookUrl || !sourceUrl) return;
-    api.getChapters(bookUrl, sourceUrl).then(setChapters).catch(() => {});
+    let cancelled = false;
+    getCachedChapterList(bookUrl, sourceUrl)
+      .then((cached) => {
+        if (!cancelled && cached.length) setChapters(cached);
+      })
+      .catch(() => {});
+    api.getChapters(bookUrl, sourceUrl)
+      .then((items) => {
+        if (!cancelled) setChapters(items);
+        saveChapterList(bookUrl, sourceUrl, items).catch(() => {});
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
   }, [bookUrl, sourceUrl]);
 
   // Repair stale read URLs saved before TOC obfuscation fallbacks existed.
@@ -183,11 +196,16 @@ export default function Read() {
   // Auto-save progress with scroll position (debounced 2s on scroll, immediate on chapter change)
   const scrollSaveRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
-    if (!bookUrl || !sourceUrl || chapters.length === 0) return;
+    if (!bookUrl || !sourceUrl) return;
 
     const saveNow = () => {
-      const ch = chapters.find((c) => c.idx === currentViewIdx);
+      const ch = chapters.find((c) => c.idx === currentViewIdx) || {
+        idx: currentViewIdx,
+        title: currentViewIdx === startIdx ? title : `Chapter ${currentViewIdx + 1}`,
+        url: currentViewIdx === startIdx ? chapterUrl : "",
+      };
       if (!ch) return;
+      if (!ch.url) return;
       const scrollPercent = document.documentElement.scrollHeight > window.innerHeight
         ? window.scrollY / (document.documentElement.scrollHeight - window.innerHeight)
         : 0;
@@ -228,7 +246,7 @@ export default function Read() {
       window.removeEventListener("pagehide", saveNow);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [currentViewIdx, bookUrl, sourceUrl, chapters, bookName, title]);
+  }, [currentViewIdx, bookUrl, sourceUrl, chapters, bookName, title, chapterUrl, startIdx]);
 
   // Prefetch next 3 chapters in background
   const prefetchChapters = useCallback((fromIdx: number) => {

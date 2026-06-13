@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "@/api/client";
 import { get as idbGet, set as idbSet } from "idb-keyval";
-import { getLocalProgress } from "@/utils/progressCache";
+import { getCachedProgress } from "@/utils/progressCache";
+import { saveChapterList } from "@/utils/chapterCache";
 
 interface BookItem {
   id: number;
@@ -48,6 +49,7 @@ export default function Shelf() {
 
     try {
       const chapters = await api.getChapters(book.book_url, book.source_url);
+      saveChapterList(book.book_url, book.source_url, chapters).catch(() => {});
       setDlProgress({ done: 0, total: chapters.length });
       let done = 0;
 
@@ -79,7 +81,7 @@ export default function Shelf() {
   };
 
   const handleClick = async (book: BookItem) => {
-    let progress = getLocalProgress(book.book_url);
+    let progress = await getCachedProgress(book.book_url);
     try {
       progress = await api.getProgress(book.book_url) || progress;
     } catch {}

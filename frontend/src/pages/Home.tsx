@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, ProgressItem } from "@/api/client";
 import { clear as idbClear } from "idb-keyval";
-import { getLocalProgressList, mergeProgress } from "@/utils/progressCache";
+import { getCachedProgressList, getLocalProgressList, mergeProgress } from "@/utils/progressCache";
 
 interface RankItem {
   name: string;
@@ -40,12 +40,22 @@ export default function Home() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    let cancelled = false;
     const localProgress = getLocalProgressList();
     if (localProgress.length) setProgress(localProgress);
+    getCachedProgressList()
+      .then((items) => {
+        if (!cancelled && items.length) setProgress(items);
+      })
+      .catch(() => {});
     api.getProgressList()
-      .then((items) => setProgress(mergeProgress(items, getLocalProgressList())))
+      .then(async (items) => {
+        const cached = await getCachedProgressList().catch(() => getLocalProgressList());
+        if (!cancelled) setProgress(mergeProgress(items, cached));
+      })
       .catch(() => {});
     api.getVersion().then((data) => setVersion(data.version.slice(0, 7))).catch(() => {});
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
